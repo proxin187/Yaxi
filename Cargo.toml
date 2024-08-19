@@ -1,0 +1,14 @@
+[package]
+name = "xrs"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "xrs"
+path = "src/lib.rs"
+
+[[bin]]
+name = "example"
+path = "src/bin.rs"
+
+[dependencies]
