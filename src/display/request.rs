@@ -2,8 +2,6 @@ use std::slice;
 use std::mem;
 use std::ptr;
 
-pub enum Event {
-}
 
 // https://xcb.freedesktop.org/manual/xproto_8h_source.html
 
@@ -74,22 +72,56 @@ pub struct PixmapFormat {
 #[repr(packed, C)]
 #[derive(Debug)]
 pub struct Screen {
-    root: u32,
-    default_colormap: u32,
-    white_pixel: u32,
-    black_pixel: u32,
-    current_input_mask: u32,
-    width_in_pixels: u16,
-    height_in_pixels: u16,
-    width_in_mm: u16,
-    height_in_mm: u16,
-    min_installed_maps: u16,
-    max_installed_maps: u16,
-    root_visual: u32,
-    backing_stores: u8,
-    save_unders: u8,
-    root_depth: u8,
-    allowed_depths_len: u8,
+    pub root: u32,
+    pub default_colormap: u32,
+    pub white_pixel: u32,
+    pub black_pixel: u32,
+    pub current_input_mask: u32,
+    pub width_in_pixels: u16,
+    pub height_in_pixels: u16,
+    pub width_in_mm: u16,
+    pub height_in_mm: u16,
+    pub min_installed_maps: u16,
+    pub max_installed_maps: u16,
+    pub root_visual: u32,
+    pub backing_stores: u8,
+    pub save_unders: u8,
+    pub root_depth: u8,
+    pub allowed_depths_len: u8,
+}
+
+#[repr(packed, C)]
+#[derive(Debug)]
+pub struct Depth {
+    pub depth: u8,
+    pub pad0: u8,
+    pub visuals_len: u16,
+    pub pad1: [u8; 4],
+}
+
+#[repr(packed, C)]
+#[derive(Debug)]
+pub struct Visual {
+    pub visual_id: u32,
+    pub class: u8,
+    pub bits_per_rgb_value: u8,
+    pub colormap_entries: u16,
+    pub red_mask: u32,
+    pub green_mask: u32,
+    pub blue_mask: u32,
+    pub pad0: [u8; 4],
+}
+
+#[repr(packed, C)]
+#[derive(Debug)]
+pub struct Event {
+    pub response_type: u8,
+    pub extension: u8,
+    pub sequence: u16,
+    pub length: u32,
+    pub event_type: u16,
+    pub pad0: [u8; 22],
+    pub full_sequence: u32,
 }
 
 pub fn encode<T>(ptr: &T) -> &[u8] {

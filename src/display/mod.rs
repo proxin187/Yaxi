@@ -48,6 +48,12 @@ impl<T> Display<T> where T: Read + Write {
         Ok(String::from_utf8(bytes)?)
     }
 
+    fn recv_decode<R>(&mut self) -> Result<R, Box<dyn std::error::Error>> {
+        let bytes = self.recv(std::mem::size_of::<R>())?;
+
+        Ok(request::decode(&bytes))
+    }
+
     fn endian(&self) -> u8 {
         cfg!(target_endian = "little")
             .then(|| 0x6c)
@@ -55,9 +61,7 @@ impl<T> Display<T> where T: Read + Write {
     }
 
     fn read_setup(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        let bytes = self.recv(std::mem::size_of::<SuccessResponse>())?;
-
-        let response: SuccessResponse = request::decode(&bytes[..]);
+        let response: SuccessResponse = self.recv_decode()?;
 
         println!("response: {:?}", response);
 
@@ -71,10 +75,18 @@ impl<T> Display<T> where T: Read + Write {
 
         println!("formats: {:?}", formats);
 
-        // TODO: implement function to remove the need of recieving bytes manually
-
-        // TODO: FINISH THIS
         for _ in 0..response.roots_len {
+            let screen: Screen = self.recv_decode()?;
+
+            for _ in 0..screen.allowed_depths_len {
+                let depth: Depth = self.recv_decode()?;
+
+                let bytes = self.recv(std::mem::size_of::<Visual>() * depth.visuals_len as usize)?;
+
+                let visuals: &[Visual] = request::decode_slice(&bytes, depth.visuals_len as usize);
+
+                println!("visuals: {:?}", visuals);
+            }
         }
 
         Ok(())
@@ -99,6 +111,9 @@ impl<T> Display<T> where T: Read + Write {
             2 => Err(Box::new(Error::Authenthicate)),
             _ => Err(Box::new(Error::InvalidStatus)),
         }
+    }
+
+    pub fn poll_events(&mut self) {
     }
 }
 
