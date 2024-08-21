@@ -114,14 +114,14 @@ pub struct Visual {
 
 #[repr(packed, C)]
 #[derive(Debug)]
-pub struct Event {
-    pub response_type: u8,
-    pub extension: u8,
+pub struct GenericEvent {
+    pub opcode: u8,
+    pub detail: u8,
     pub sequence: u16,
-    pub length: u32,
-    pub event_type: u16,
-    pub pad0: [u8; 22],
-    pub full_sequence: u32,
+    // pub length: u32,
+    // pub event_type: u16,
+    // pub pad0: [u8; 22],
+    // pub full_sequence: u32,
 }
 
 pub fn encode<T>(ptr: &T) -> &[u8] {
