@@ -1,10 +1,13 @@
+mod window;
 mod request;
 mod error;
 mod event;
+mod xid;
 
 use error::Error;
 use event::*;
 use request::*;
+use xid::Xid;
 
 use std::os::unix::net::UnixStream;
 use std::net::{SocketAddr, TcpStream};
@@ -80,9 +83,11 @@ impl<T> Stream<T> where T: Send + Sync + Read + Write + TryClone {
     }
 }
 
+
 pub struct Display<T> {
     stream: Stream<T>,
     events: Arc<Mutex<Vec<EventKind>>>,
+    xid: Xid,
 }
 
 impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
@@ -90,6 +95,7 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
         let mut display = Display {
             stream: Stream::new(inner),
             events: Arc::new(Mutex::new(Vec::new())),
+            xid: Xid::new(),
         };
 
         display.setup()?;
@@ -106,7 +112,7 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
     fn read_setup(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         let response: SuccessResponse = self.stream.recv_decode()?;
 
-        // println!("response: {:?}", response);
+        println!("response: {:?}", response);
 
         let vendor = self.stream.recv_str(response.vendor_len as usize)?;
 
@@ -154,9 +160,6 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
         let bytes = self.stream.recv(8)?;
         let response: SetupResponse = request::decode(&bytes);
 
-        // TODO: setup response is only used as a temporary type before we know what type it really
-        // has
-
         println!("response: {:?}", response);
 
         match response.status {
@@ -165,6 +168,10 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
             2 => Err(Box::new(Error::Authenthicate)),
             _ => Err(Box::new(Error::InvalidStatus)),
         }
+    }
+
+    // TODO: implement create window
+    pub fn create_window(&mut self) {
     }
 }
 
@@ -182,28 +189,42 @@ impl<T> EventListener<T> where T: Send + Sync + Read + Write + TryClone {
     }
 
     fn handle_reply(&mut self, event: GenericEvent) {
-    }
-
-    fn handle_event(&mut self, event: GenericEvent) {
-        match event.opcode & 0b0111111 {
-            Protocol::ERROR => {
-            },
-            Protocol::REPLY => {
-                self.handle_reply(event);
-            },
-            Protocol::KEY_PRESS => {
-            },
+        match event.sequence {
             _ => {},
         }
     }
 
-    pub fn listen(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        println!("\nevent: {:?}", std::mem::size_of::<GenericEvent>());
+    fn handle_event(&mut self, event: GenericEvent) -> Result<(), Box<dyn std::error::Error>> {
+        match event.opcode & 0b0111111 {
+            Protocol::ERROR => {
+                let _: ErrorEvent = self.stream.recv_decode()?;
 
+                Err(Box::new(Error::Event {
+                    detail: event.detail,
+                    sequence: event.sequence,
+                }))
+            },
+            Protocol::REPLY => {
+                self.handle_reply(event);
+
+                Ok(())
+            },
+            Protocol::KEY_PRESS | Protocol::KEY_RELEASE => {
+                let event: KeyEvent = self.stream.recv_decode()?;
+
+                println!("event: {:?}", event);
+
+                Ok(())
+            },
+            _ => Ok(()),
+        }
+    }
+
+    pub fn listen(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         loop {
             let event: GenericEvent = self.stream.recv_decode()?;
 
-            self.handle_event(event);
+            self.handle_event(event)?;
         }
     }
 }

@@ -124,6 +124,45 @@ pub struct GenericEvent {
     // pub full_sequence: u32,
 }
 
+#[repr(packed, C)]
+#[derive(Debug)]
+pub struct ErrorEvent {
+    pub bad_value: u32,
+    pub minor_opcode: u16,
+    pub major_opcode: u8,
+    pub pad0: u8,
+}
+
+#[repr(packed, C)]
+#[derive(Debug)]
+pub struct KeyEvent {
+    pub time: u32,
+    pub root: u32,
+    pub event: u32,
+    pub child: u32,
+    pub root_x: u16,
+    pub root_y: u16,
+    pub event_x: u16,
+    pub event_y: u16,
+    pub state: u16,
+    pub same_screen: u8,
+    pub pad0: u8,
+}
+
+#[repr(packed, C)]
+#[derive(Debug)]
+pub struct GrabKey {
+    major_opcode: u8,
+    owner_events: u8,
+    length: u16,
+    grab_window: u32,
+    modifiers: u16,
+    key: u8,
+    pointer_mode: u8,
+    keyboard_mode: u8,
+    pad0: [u8; 3],
+}
+
 pub fn encode<T>(ptr: &T) -> &[u8] {
     unsafe {
         slice::from_raw_parts((ptr as *const T) as *const u8, mem::size_of::<T>())
