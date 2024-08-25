@@ -1,7 +1,12 @@
 use super::*;
 
-// NOTE: xcb has a fucked up implementation of this, never using the xcb source as an example again
+pub const XID: Mutex<Xid> = Mutex::new(Xid::new());
 
+macro_rules! lock {
+    ($mutex:expr) => {
+        $mutex.lock().map_err(|_| Into::<Box<dyn std::error::Error>>::into("failed to lock mutex"))
+    }
+}
 
 pub struct Xid {
     base: u32,
@@ -10,7 +15,7 @@ pub struct Xid {
 }
 
 impl Xid {
-    pub fn new() -> Xid {
+    const fn new() -> Xid {
         Xid {
             base: 0,
             mask: 0,
@@ -18,7 +23,7 @@ impl Xid {
         }
     }
 
-    pub fn next(&mut self) -> Result<u32, Box<dyn std::error::Error>> {
+    fn next(&mut self) -> Result<u32, Box<dyn std::error::Error>> {
         self.next += 1;
 
         if self.next >= self.mask {
@@ -27,6 +32,10 @@ impl Xid {
             Ok(self.next | self.base)
         }
     }
+}
+
+pub fn next() -> Result<u32, Box<dyn std::error::Error>> {
+    lock!(XID)?.next()
 }
 
 

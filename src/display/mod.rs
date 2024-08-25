@@ -1,12 +1,13 @@
 mod window;
 mod request;
 mod error;
-mod event;
+mod proto;
 mod xid;
 
 use error::Error;
-use event::*;
+use proto::*;
 use request::*;
+use window::*;
 use xid::Xid;
 
 use std::os::unix::net::UnixStream;
@@ -87,7 +88,7 @@ impl<T> Stream<T> where T: Send + Sync + Read + Write + TryClone {
 pub struct Display<T> {
     stream: Stream<T>,
     events: Arc<Mutex<Vec<EventKind>>>,
-    xid: Xid,
+    sequence: u16,
 }
 
 impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
@@ -95,7 +96,7 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
         let mut display = Display {
             stream: Stream::new(inner),
             events: Arc::new(Mutex::new(Vec::new())),
-            xid: Xid::new(),
+            sequence: 0,
         };
 
         display.setup()?;
@@ -169,10 +170,6 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
             _ => Err(Box::new(Error::InvalidStatus)),
         }
     }
-
-    // TODO: implement create window
-    pub fn create_window(&mut self) {
-    }
 }
 
 pub struct EventListener<T> {
@@ -196,7 +193,7 @@ impl<T> EventListener<T> where T: Send + Sync + Read + Write + TryClone {
 
     fn handle_event(&mut self, event: GenericEvent) -> Result<(), Box<dyn std::error::Error>> {
         match event.opcode & 0b0111111 {
-            Protocol::ERROR => {
+            Response::ERROR => {
                 let _: ErrorEvent = self.stream.recv_decode()?;
 
                 Err(Box::new(Error::Event {
@@ -204,12 +201,12 @@ impl<T> EventListener<T> where T: Send + Sync + Read + Write + TryClone {
                     sequence: event.sequence,
                 }))
             },
-            Protocol::REPLY => {
+            Response::REPLY => {
                 self.handle_reply(event);
 
                 Ok(())
             },
-            Protocol::KEY_PRESS | Protocol::KEY_RELEASE => {
+            Response::KEY_PRESS | Response::KEY_RELEASE => {
                 let event: KeyEvent = self.stream.recv_decode()?;
 
                 println!("event: {:?}", event);

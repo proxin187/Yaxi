@@ -151,6 +151,44 @@ pub struct KeyEvent {
 
 #[repr(packed, C)]
 #[derive(Debug)]
+pub struct CreateWindow {
+    pub opcode: u8,
+    pub depth: u8,
+    pub length: u16,
+    pub wid: u32,
+    pub parent: u32,
+    pub x: u16,
+    pub y: u16,
+    pub width: u16,
+    pub height: u16,
+    pub border_width: u16,
+    pub class: u16,
+    pub visual: u32,
+}
+
+#[repr(packed, C)]
+#[derive(Debug)]
+pub struct WindowValues {
+    pub value_mask: u32,
+    pub background_pixmap: u32,
+    pub background_pixel: u32,
+    pub border_pixmap: u32,
+    pub border_pixel: u32,
+    pub bit_gravity: u32,
+    pub win_gravity: u32,
+    pub backing_stores: u32,
+    pub backing_planes: u32,
+    pub backing_pixel: u32,
+    pub override_redirect: u8,
+    pub save_under: u8,
+    pub event_mask: u32,
+    pub do_not_propogate_mask: u32,
+    pub colormap: u32,
+    pub cursor: u32,
+}
+
+#[repr(packed, C)]
+#[derive(Debug)]
 pub struct GrabKey {
     major_opcode: u8,
     owner_events: u8,
