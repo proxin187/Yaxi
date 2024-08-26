@@ -26,6 +26,7 @@ impl Xid {
     fn next(&mut self) -> Result<u32, Box<dyn std::error::Error>> {
         self.next += 1;
 
+        // TODO: this is currently always coming out as true
         if self.next >= self.mask {
             Err(Box::new(Error::RanOutOfXid))
         } else {

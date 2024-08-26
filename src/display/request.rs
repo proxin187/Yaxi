@@ -167,8 +167,8 @@ pub struct CreateWindow {
 }
 
 #[repr(packed, C)]
-#[derive(Debug)]
-pub struct WindowValues {
+#[derive(Debug, Default, Clone, Copy)]
+pub struct WindowValuesRequest {
     pub value_mask: u32,
     pub background_pixmap: u32,
     pub background_pixel: u32,
@@ -176,8 +176,8 @@ pub struct WindowValues {
     pub border_pixel: u32,
     pub bit_gravity: u32,
     pub win_gravity: u32,
-    pub backing_stores: u32,
-    pub backing_planes: u32,
+    pub backing_store: u32,
+    pub backing_plane: u32,
     pub backing_pixel: u32,
     pub override_redirect: u8,
     pub save_under: u8,

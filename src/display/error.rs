@@ -6,6 +6,7 @@ pub enum Error {
     SetupFailed,
     Authenthicate,
     RanOutOfXid,
+    NoScreens,
     Event {
         detail: u8,
         sequence: u16,
@@ -35,6 +36,9 @@ impl std::fmt::Display for Error {
             },
             Error::RanOutOfXid => {
                 f.write_str("server ran out of xid's")
+            },
+            Error::NoScreens => {
+                f.write_str("server never informed of any screens")
             },
             Error::Event { detail, sequence } => {
                 f.write_fmt(format_args!("[error event] detail={}, sequence={}", detail, sequence))

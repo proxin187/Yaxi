@@ -16,12 +16,14 @@ pub enum VisualClass {
     DirectColor = 5,
 }
 
+#[derive(Clone, Copy)]
 pub enum BackingStore {
     NotUseful = 0,
     WhenMapped = 1,
     Always = 2,
 }
 
+#[derive(Clone, Copy)]
 pub enum Gravity {
     Forget = 0,
     NorthWest = 1,
@@ -36,6 +38,7 @@ pub enum Gravity {
     Static = 10,
 }
 
+#[derive(Clone, Copy)]
 pub enum EventMask {
     NoEvent = 0,
     KeyPress = 1,
@@ -65,8 +68,12 @@ pub enum EventMask {
     OwnerGrabButton = 16777216,
 }
 
-// TODO: FINISH THIS
-pub enum WindowValue<'a> {
+#[derive(Clone)]
+pub enum Cursor {
+}
+
+#[derive(Clone)]
+pub enum WindowValue {
     BgPixmap(u32),
     BgPixel(u32),
     BorderPixmap(u32),
@@ -77,18 +84,69 @@ pub enum WindowValue<'a> {
     BackingPlane(u32),
     OverrideRedirect(bool),
     SaveUnder(bool),
-    EventMask(&'a [EventMask]),
+    EventMask(Vec<EventMask>),
+    DoNotPropogateMask(Vec<EventMask>),
+    Colormap(u32),
+    Cursor(Cursor),
+}
+
+pub struct WindowValuesBuilder {
+    values: Vec<WindowValue>,
+    request: WindowValuesRequest,
+}
+
+impl WindowValuesBuilder {
+    pub fn new(values: &[WindowValue]) -> WindowValuesBuilder {
+        WindowValuesBuilder {
+            values: values.to_vec(),
+            request: WindowValuesRequest::default(),
+        }
+    }
+
+    fn mask(&self, masks: Vec<EventMask>) -> u32 {
+        masks.iter()
+            .map(|event_mask| *event_mask as u32)
+            .fold(0, |acc, x| acc ^ x)
+    }
+
+    fn insert_value(&mut self, value: WindowValue) {
+        match value {
+            WindowValue::BgPixmap(pixmap) => self.request.background_pixmap = pixmap,
+            WindowValue::BgPixel(pixel) => self.request.background_pixel = pixel,
+            WindowValue::BorderPixmap(pixmap) => self.request.border_pixmap = pixmap,
+            WindowValue::BorderPixel(pixel) => self.request.border_pixel = pixel,
+            WindowValue::BitGravity(gravity) => self.request.bit_gravity = gravity as u32,
+            WindowValue::WinGravity(gravity) => self.request.win_gravity = gravity as u32,
+            WindowValue::BackingStore(store) => self.request.backing_store = store as u32,
+            WindowValue::BackingPlane(plane) => self.request.backing_plane = plane as u32,
+            WindowValue::OverrideRedirect(value) => self.request.override_redirect = value as u8,
+            WindowValue::SaveUnder(value) => self.request.save_under = value as u8,
+            WindowValue::EventMask(masks) => self.request.event_mask = self.mask(masks),
+            WindowValue::DoNotPropogateMask(masks) => self.request.do_not_propogate_mask = self.mask(masks),
+            WindowValue::Colormap(colormap) => self.request.colormap = colormap,
+            WindowValue::Cursor(cursor) => self.request.cursor = cursor as u32,
+        }
+    }
+
+    pub fn build(&mut self) -> Result<WindowValuesRequest, Box<dyn std::error::Error>> {
+        for value in self.values.clone() {
+            self.insert_value(value);
+        }
+
+        Ok(self.request)
+    }
 }
 
 pub struct WindowArguments {
-    depth: u8,
-    x: u16,
-    y: u16,
-    width: u16,
-    height: u16,
-    border_width: u16,
-    class: WindowClass,
-    visual: VisualClass,
+    pub depth: u8,
+    pub x: u16,
+    pub y: u16,
+    pub width: u16,
+    pub height: u16,
+    pub border_width: u16,
+    pub class: WindowClass,
+    pub visual: VisualClass,
+    pub values: WindowValuesBuilder,
 }
 
 pub struct Window<T> {
@@ -97,16 +155,16 @@ pub struct Window<T> {
 }
 
 impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
-    fn new(inner: T, id: u32) -> Window<T> {
+    pub fn new(stream: Stream<T>, id: u32) -> Window<T> {
         Window {
-            stream: Stream::new(inner),
+            stream,
             id,
         }
     }
 
     pub fn id(&self) -> u32 { self.id }
 
-    pub fn create_window(&mut self, window: WindowArguments, values: &[WindowValue]) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn create_window(&mut self, mut window: WindowArguments) -> Result<Window<T>, Box<dyn std::error::Error>> {
         let window_request = CreateWindow {
             opcode: Opcode::CREATE_WINDOW,
             depth: window.depth,
@@ -124,7 +182,11 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
 
         self.stream.inner.write_all(request::encode(&window_request))?;
 
-        Ok(())
+        let window_values_request = window.values.build()?;
+
+        self.stream.inner.write_all(request::encode(&window_values_request))?;
+
+        Ok(Window::new(self.stream.try_clone()?, window_request.wid))
     }
 
     pub fn grab_key(&mut self) {

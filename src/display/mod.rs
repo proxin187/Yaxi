@@ -1,6 +1,6 @@
-mod window;
+pub mod window;
+pub mod error;
 mod request;
-mod error;
 mod proto;
 mod xid;
 
@@ -8,7 +8,6 @@ use error::Error;
 use proto::*;
 use request::*;
 use window::*;
-use xid::Xid;
 
 use std::os::unix::net::UnixStream;
 use std::net::{SocketAddr, TcpStream};
@@ -88,6 +87,7 @@ impl<T> Stream<T> where T: Send + Sync + Read + Write + TryClone {
 pub struct Display<T> {
     stream: Stream<T>,
     events: Arc<Mutex<Vec<EventKind>>>,
+    roots: Vec<Screen>,
     sequence: u16,
 }
 
@@ -96,12 +96,20 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
         let mut display = Display {
             stream: Stream::new(inner),
             events: Arc::new(Mutex::new(Vec::new())),
+            roots: Vec::new(),
             sequence: 0,
         };
 
         display.setup()?;
 
         Ok(display)
+    }
+
+    pub fn default_root_window(&self) -> Result<Window<T>, Box<dyn std::error::Error>> {
+        let stream = self.stream.try_clone()?;
+        let root = self.roots.first().ok_or(Error::NoScreens)?.root;
+
+        Ok(Window::<T>::new(stream, root))
     }
 
     fn endian(&self) -> u8 {
@@ -137,6 +145,8 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
 
                 // println!("visuals: {:?}", visuals);
             }
+
+            self.roots.push(screen);
         }
 
         let stream = self.stream.try_clone()?;
