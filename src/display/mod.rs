@@ -21,6 +21,8 @@ const X_TCP_PORT: u16 = 6000;
 const X_PROTOCOL: u16 = 11;
 const X_PROTOCOL_REVISION: u16 = 0;
 
+static SEQUENCE: u16 = 0;
+
 
 pub trait TryClone {
     fn try_clone(&self) -> Result<Box<Self>, Box<dyn std::error::Error>>;
@@ -88,7 +90,6 @@ pub struct Display<T> {
     stream: Stream<T>,
     events: Arc<Mutex<Vec<EventKind>>>,
     roots: Vec<Screen>,
-    sequence: u16,
 }
 
 impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
@@ -97,7 +98,6 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
             stream: Stream::new(inner),
             events: Arc::new(Mutex::new(Vec::new())),
             roots: Vec::new(),
-            sequence: 0,
         };
 
         display.setup()?;
@@ -107,9 +107,9 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
 
     pub fn default_root_window(&self) -> Result<Window<T>, Box<dyn std::error::Error>> {
         let stream = self.stream.try_clone()?;
-        let root = self.roots.first().ok_or(Error::NoScreens)?.root;
+        let screen = self.roots.first().ok_or(Error::NoScreens)?;
 
-        Ok(Window::<T>::new(stream, root))
+        Ok(Window::<T>::new(stream, VisualClass::from(screen.root_visual), screen.root_depth, screen.root))
     }
 
     fn endian(&self) -> u8 {
@@ -160,6 +160,8 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
             }
         });
 
+        xid::setup(response.resource_id_base, response.resource_id_mask)?;
+
         Ok(())
     }
 
@@ -204,7 +206,9 @@ impl<T> EventListener<T> where T: Send + Sync + Read + Write + TryClone {
     fn handle_event(&mut self, event: GenericEvent) -> Result<(), Box<dyn std::error::Error>> {
         match event.opcode & 0b0111111 {
             Response::ERROR => {
-                let _: ErrorEvent = self.stream.recv_decode()?;
+                let error: ErrorEvent = self.stream.recv_decode()?;
+
+                println!("error: {:?}", error);
 
                 Err(Box::new(Error::Event {
                     detail: event.detail,

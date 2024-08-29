@@ -7,13 +7,30 @@ pub enum WindowClass {
     InputOnly = 2,
 }
 
+#[derive(Clone, Copy)]
 pub enum VisualClass {
     StaticGray = 0,
     GrayScale = 1,
     StaticColor = 2,
     PsuedoColor = 3,
     TrueColor = 4,
-    DirectColor = 5,
+    DirectColor = 33,
+}
+
+impl From<u32> for VisualClass {
+    fn from(value: u32) -> VisualClass {
+        println!("value: {}", value);
+
+        match value {
+            0 => VisualClass::StaticGray,
+            1 => VisualClass::GrayScale,
+            2 => VisualClass::StaticColor,
+            3 => VisualClass::PsuedoColor,
+            4 => VisualClass::TrueColor,
+            33 => VisualClass::DirectColor,
+            _ => unreachable!(),
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -103,6 +120,8 @@ impl WindowValuesBuilder {
         }
     }
 
+    fn len(&self) -> u16 { self.values.len() as u16 }
+
     fn mask(&self, masks: Vec<EventMask>) -> u32 {
         masks.iter()
             .map(|event_mask| *event_mask as u32)
@@ -139,8 +158,8 @@ impl WindowValuesBuilder {
 
 pub struct WindowArguments {
     pub depth: u8,
-    pub x: u16,
-    pub y: u16,
+    pub x: i16,
+    pub y: i16,
     pub width: u16,
     pub height: u16,
     pub border_width: u16,
@@ -151,24 +170,35 @@ pub struct WindowArguments {
 
 pub struct Window<T> {
     stream: Stream<T>,
+    visual: VisualClass,
+    depth: u8,
     id: u32,
 }
 
 impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
-    pub fn new(stream: Stream<T>, id: u32) -> Window<T> {
+    pub fn new(stream: Stream<T>, visual: VisualClass, depth: u8, id: u32) -> Window<T> {
         Window {
             stream,
+            visual,
+            depth,
             id,
         }
     }
 
     pub fn id(&self) -> u32 { self.id }
 
+    pub fn depth(&self) -> u8 { self.depth }
+
+    pub fn visual(&self) -> VisualClass { self.visual }
+
+    // TODO: this function is the problem
+    // its most likely related to window values
+
     pub fn create_window(&mut self, mut window: WindowArguments) -> Result<Window<T>, Box<dyn std::error::Error>> {
         let window_request = CreateWindow {
             opcode: Opcode::CREATE_WINDOW,
             depth: window.depth,
-            length: 0,
+            length: 8 + window.values.len(),
             wid: xid::next()?,
             parent: self.id(),
             x: window.x,
@@ -182,11 +212,14 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
 
         self.stream.inner.write_all(request::encode(&window_request))?;
 
+        // TODO: it only seems like it writes the arguments it knows its going to use
         let window_values_request = window.values.build()?;
 
         self.stream.inner.write_all(request::encode(&window_values_request))?;
 
-        Ok(Window::new(self.stream.try_clone()?, window_request.wid))
+        // TODO: SEQUENCE THINGY
+
+        Ok(Window::new(self.stream.try_clone()?, window.visual, window_request.depth, window_request.wid))
     }
 
     pub fn grab_key(&mut self) {

@@ -2,20 +2,27 @@ use xrs::display::window::{WindowArguments, WindowValuesBuilder, WindowClass, Vi
 use xrs::display;
 
 
+// TODO: write a tcp mitm proxy
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let display = display::open_unix(2)?;
+    let display = display::open_unix(3)?;
 
     let mut root = display.default_root_window()?;
 
+    println!("root_depth: {}", root.depth());
+
+    // TODO: create_window is the problem
+
     let window = root.create_window(WindowArguments {
-        depth: 0,
+        depth: root.depth(),
         x: 0,
         y: 0,
         width: 100,
         height: 200,
         border_width: 15,
         class: WindowClass::InputOutput,
-        visual: VisualClass::TrueColor,
+        // visual: root.visual(),
+        visual: VisualClass::DirectColor,
         values: WindowValuesBuilder::new(&[]),
     })?;
 
