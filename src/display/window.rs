@@ -99,6 +99,7 @@ pub enum WindowValue {
     WinGravity(Gravity),
     BackingStore(BackingStore),
     BackingPlane(u32),
+    BackingPixel(u32),
     OverrideRedirect(bool),
     SaveUnder(bool),
     EventMask(Vec<EventMask>),
@@ -107,16 +108,40 @@ pub enum WindowValue {
     Cursor(Cursor),
 }
 
+impl WindowValue {
+    pub fn mask(&self) -> u32 {
+        match self {
+            WindowValue::BgPixmap(_) => 0x00000001,
+            WindowValue::BgPixel(_) => 0x00000002,
+            WindowValue::BorderPixmap(_) => 0x00000004,
+            WindowValue::BorderPixel(_) => 0x00000008,
+            WindowValue::BitGravity(_) => 0x00000010,
+            WindowValue::WinGravity(_) => 0x00000020,
+            WindowValue::BackingStore(_) => 0x00000040,
+            WindowValue::BackingPlane(_) => 0x00000080,
+            WindowValue::BackingPixel(_) => 0x00000100,
+            WindowValue::OverrideRedirect(_) => 0x00000200,
+            WindowValue::SaveUnder(_) => 0x00000400,
+            WindowValue::EventMask(_) => 0x00000800,
+            WindowValue::DoNotPropogateMask(_) => 0x00001000,
+            WindowValue::Colormap(_) => 0x00002000,
+            WindowValue::Cursor(_) => 0x00004000,
+        }
+    }
+}
+
 pub struct WindowValuesBuilder {
     values: Vec<WindowValue>,
-    request: WindowValuesRequest,
+    request: Vec<u8>,
+    value_mask: u32,
 }
 
 impl WindowValuesBuilder {
     pub fn new(values: &[WindowValue]) -> WindowValuesBuilder {
         WindowValuesBuilder {
             values: values.to_vec(),
-            request: WindowValuesRequest::default(),
+            request: Vec::new(),
+            value_mask: 0,
         }
     }
 
@@ -129,30 +154,39 @@ impl WindowValuesBuilder {
     }
 
     fn insert_value(&mut self, value: WindowValue) {
+        self.value_mask |= value.mask();
+
         match value {
-            WindowValue::BgPixmap(pixmap) => self.request.background_pixmap = pixmap,
-            WindowValue::BgPixel(pixel) => self.request.background_pixel = pixel,
-            WindowValue::BorderPixmap(pixmap) => self.request.border_pixmap = pixmap,
-            WindowValue::BorderPixel(pixel) => self.request.border_pixel = pixel,
-            WindowValue::BitGravity(gravity) => self.request.bit_gravity = gravity as u32,
-            WindowValue::WinGravity(gravity) => self.request.win_gravity = gravity as u32,
-            WindowValue::BackingStore(store) => self.request.backing_store = store as u32,
-            WindowValue::BackingPlane(plane) => self.request.backing_plane = plane as u32,
-            WindowValue::OverrideRedirect(value) => self.request.override_redirect = value as u8,
-            WindowValue::SaveUnder(value) => self.request.save_under = value as u8,
-            WindowValue::EventMask(masks) => self.request.event_mask = self.mask(masks),
-            WindowValue::DoNotPropogateMask(masks) => self.request.do_not_propogate_mask = self.mask(masks),
-            WindowValue::Colormap(colormap) => self.request.colormap = colormap,
-            WindowValue::Cursor(cursor) => self.request.cursor = cursor as u32,
+            WindowValue::BgPixmap(value)
+                | WindowValue::BgPixel(value)
+                | WindowValue::BorderPixmap(value)
+                | WindowValue::BorderPixel(value)
+                | WindowValue::BackingPlane(value)
+                | WindowValue::BackingPixel(value)
+                | WindowValue::Colormap(value) => self.request.extend(request::encode(&value)),
+
+            WindowValue::BitGravity(gravity)
+                | WindowValue::WinGravity(gravity) => self.request.extend(request::encode(&(gravity as u32))),
+
+            WindowValue::OverrideRedirect(value)
+                | WindowValue::SaveUnder(value) => self.request.extend(request::encode(&(value as u8))),
+
+            WindowValue::EventMask(masks)
+                | WindowValue::DoNotPropogateMask(masks)=> self.request.extend(request::encode(&self.mask(masks))),
+
+            WindowValue::Cursor(cursor) => self.request.extend(request::encode(&(cursor as u32))),
+            WindowValue::BackingStore(store) => self.request.extend(request::encode(&(store as u32))),
         }
     }
 
-    pub fn build(&mut self) -> Result<WindowValuesRequest, Box<dyn std::error::Error>> {
+    pub fn build(&mut self) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+        self.values.sort_by(|a, b| a.mask().partial_cmp(&b.mask()).unwrap());
+
         for value in self.values.clone() {
             self.insert_value(value);
         }
 
-        Ok(self.request)
+        Ok(self.request.clone())
     }
 }
 
@@ -195,6 +229,8 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
     // its most likely related to window values
 
     pub fn create_window(&mut self, mut window: WindowArguments) -> Result<Window<T>, Box<dyn std::error::Error>> {
+        let window_values_request = window.values.build()?;
+
         let window_request = CreateWindow {
             opcode: Opcode::CREATE_WINDOW,
             depth: window.depth,
@@ -208,14 +244,15 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
             border_width: window.border_width,
             class: window.class as u16,
             visual: window.visual as u32,
+            value_mask: window.values.value_mask,
         };
 
         self.stream.inner.write_all(request::encode(&window_request))?;
 
         // TODO: it only seems like it writes the arguments it knows its going to use
-        let window_values_request = window.values.build()?;
+        // only the arguments u use are sendt
 
-        self.stream.inner.write_all(request::encode(&window_values_request))?;
+        // self.stream.inner.write_all(request::encode(&window_values_request))?;
 
         // TODO: SEQUENCE THINGY
 

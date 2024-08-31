@@ -164,12 +164,13 @@ pub struct CreateWindow {
     pub border_width: u16,
     pub class: u16,
     pub visual: u32,
+    pub value_mask: u32,
 }
 
+/*
 #[repr(packed, C)]
 #[derive(Debug, Default, Clone, Copy)]
 pub struct WindowValuesRequest {
-    pub value_mask: u32,
     pub background_pixmap: u32,
     pub background_pixel: u32,
     pub border_pixmap: u32,
@@ -186,6 +187,7 @@ pub struct WindowValuesRequest {
     pub colormap: u32,
     pub cursor: u32,
 }
+*/
 
 #[repr(packed, C)]
 #[derive(Debug)]

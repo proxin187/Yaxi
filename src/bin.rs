@@ -2,10 +2,8 @@ use xrs::display::window::{WindowArguments, WindowValuesBuilder, WindowClass, Vi
 use xrs::display;
 
 
-// TODO: write a tcp mitm proxy
-
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let display = display::open_unix(3)?;
+    let display = display::open_unix(2)?;
 
     let mut root = display.default_root_window()?;
 
