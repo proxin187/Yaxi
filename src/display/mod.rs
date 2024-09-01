@@ -21,8 +21,6 @@ const X_TCP_PORT: u16 = 6000;
 const X_PROTOCOL: u16 = 11;
 const X_PROTOCOL_REVISION: u16 = 0;
 
-static SEQUENCE: u16 = 0;
-
 
 pub trait TryClone {
     fn try_clone(&self) -> Result<Box<Self>, Box<dyn std::error::Error>>;
@@ -85,22 +83,43 @@ impl<T> Stream<T> where T: Send + Sync + Read + Write + TryClone {
     }
 }
 
+pub struct Authenthication<'a> {
+    name: &'a str,
+    data: &'a str,
+}
+
+impl<'a> Authenthication<'a> {
+    pub fn new(name: &'a str, data: &'a str) -> Authenthication<'a> {
+        Authenthication {
+            name,
+            data,
+        }
+    }
+
+    pub fn to_bytes(&self) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+        let data = u128::from_str_radix(self.data, 16);
+
+        Ok([self.name.as_bytes().to_vec(), request::pad(self.name.len()), request::encode(&data).to_vec(), request::pad(self.data.len())].concat())
+    }
+}
 
 pub struct Display<T> {
     stream: Stream<T>,
     events: Arc<Mutex<Vec<EventKind>>>,
     roots: Vec<Screen>,
+    sequence: SequenceManager,
 }
 
 impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
-    pub fn connect(inner: T) -> Result<Display<T>, Box<dyn std::error::Error>> {
+    pub fn connect<'a>(inner: T, auth: Authenthication<'a>) -> Result<Display<T>, Box<dyn std::error::Error>> {
         let mut display = Display {
             stream: Stream::new(inner),
             events: Arc::new(Mutex::new(Vec::new())),
             roots: Vec::new(),
+            sequence: SequenceManager::new(),
         };
 
-        display.setup()?;
+        display.setup(auth)?;
 
         Ok(display)
     }
@@ -109,7 +128,7 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
         let stream = self.stream.try_clone()?;
         let screen = self.roots.first().ok_or(Error::NoScreens)?;
 
-        Ok(Window::<T>::new(stream, VisualClass::from(screen.root_visual), screen.root_depth, screen.root))
+        Ok(Window::<T>::new(stream, self.sequence.clone(), VisualClass::from(screen.root_visual), screen.root_depth, screen.root))
     }
 
     fn endian(&self) -> u8 {
@@ -141,6 +160,7 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
 
                 let bytes = self.stream.recv(std::mem::size_of::<Visual>() * depth.visuals_len as usize)?;
 
+                // TODO: append visuals
                 let visuals: &[Visual] = request::decode_slice(&bytes, depth.visuals_len as usize);
 
                 // println!("visuals: {:?}", visuals);
@@ -151,9 +171,10 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
 
         let stream = self.stream.try_clone()?;
         let events = self.events.clone();
+        let sequence = self.sequence.clone();
 
         thread::spawn(move || {
-            let mut listener = EventListener::new(stream, events);
+            let mut listener = EventListener::new(stream, events, sequence);
 
             if let Err(err) = listener.listen() {
                 println!("[ERROR] listener failed: {}", err);
@@ -165,19 +186,25 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
         Ok(())
     }
 
-    fn setup(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        let request = SetupRequest::new(self.endian(), X_PROTOCOL, X_PROTOCOL_REVISION);
+    fn setup<'a>(&mut self, auth: Authenthication<'a>) -> Result<(), Box<dyn std::error::Error>> {
+        // TODO: connection setup fails when connecting to main server
+        // looks like its related to authenthication, for some reason it only happends
+        // TEST OUT: xauth
+
+        // TODO: implement authenthication, name is the autherization name and data is the value
+        // also implement better error messages
+
+        let request = SetupRequest::new(self.endian(), X_PROTOCOL, X_PROTOCOL_REVISION, auth.name.len() as u16, auth.data.len() as u16);
 
         self.stream.inner.write_all(request::encode(&request))?;
 
-        let bytes = self.stream.recv(8)?;
-        let response: SetupResponse = request::decode(&bytes);
+        self.stream.inner.write_all(&auth.to_bytes()?)?;
 
-        println!("response: {:?}", response);
+        let response: SetupResponse = self.stream.recv_decode()?;
 
         match response.status {
             1 => self.read_setup(),
-            0 => Err(Box::new(Error::SetupFailed)),
+            0 => Err(Box::new(Error::SetupFailed { reason: self.stream.recv_str(response.padding as usize)? })),
             2 => Err(Box::new(Error::Authenthicate)),
             _ => Err(Box::new(Error::InvalidStatus)),
         }
@@ -187,13 +214,15 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
 pub struct EventListener<T> {
     stream: Stream<T>,
     events: Arc<Mutex<Vec<EventKind>>>,
+    sequence: SequenceManager,
 }
 
 impl<T> EventListener<T> where T: Send + Sync + Read + Write + TryClone {
-    pub fn new(stream: Stream<T>, events: Arc<Mutex<Vec<EventKind>>>) -> EventListener<T> {
+    pub fn new(stream: Stream<T>, events: Arc<Mutex<Vec<EventKind>>>, sequence: SequenceManager) -> EventListener<T> {
         EventListener {
             stream,
             events,
+            sequence,
         }
     }
 
@@ -240,20 +269,20 @@ impl<T> EventListener<T> where T: Send + Sync + Read + Write + TryClone {
     }
 }
 
-pub fn open_tcp(display: u16) -> Result<Display<TcpStream>, Box<dyn std::error::Error>> {
+pub fn open_tcp<'a>(display: u16, auth: Authenthication<'a>) -> Result<Display<TcpStream>, Box<dyn std::error::Error>> {
     let stream = TcpStream::connect(SocketAddr::from(([127, 0, 0, 1], X_TCP_PORT + display)))?;
 
     stream.set_nonblocking(false)?;
 
-    Ok(Display::connect(stream)?)
+    Ok(Display::connect(stream, auth)?)
 }
 
-pub fn open_unix(display: u16) -> Result<Display<UnixStream>, Box<dyn std::error::Error>> {
+pub fn open_unix<'a>(display: u16, auth: Authenthication<'a>) -> Result<Display<UnixStream>, Box<dyn std::error::Error>> {
     let stream = UnixStream::connect(format!("/tmp/.X11-unix/X{}", display))?;
 
     stream.set_nonblocking(false)?;
 
-    Ok(Display::connect(stream)?)
+    Ok(Display::connect(stream, auth)?)
 }
 
 

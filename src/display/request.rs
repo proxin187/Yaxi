@@ -17,15 +17,15 @@ pub struct SetupRequest {
 }
 
 impl SetupRequest {
-    pub fn new(endian: u8, major_version: u16, minor_version: u16) -> SetupRequest {
+    pub fn new(endian: u8, major_version: u16, minor_version: u16, name_len: u16, data_len: u16) -> SetupRequest {
         SetupRequest {
             endian,
-            pad0: 0,
+            pad0: endian,
             major_version,
             minor_version,
-            name_len: 0,
-            data_len: 0,
-            pad1: [0; 2],
+            name_len,
+            data_len,
+            pad1: [endian; 2],
         }
     }
 }
@@ -167,27 +167,14 @@ pub struct CreateWindow {
     pub value_mask: u32,
 }
 
-/*
 #[repr(packed, C)]
-#[derive(Debug, Default, Clone, Copy)]
-pub struct WindowValuesRequest {
-    pub background_pixmap: u32,
-    pub background_pixel: u32,
-    pub border_pixmap: u32,
-    pub border_pixel: u32,
-    pub bit_gravity: u32,
-    pub win_gravity: u32,
-    pub backing_store: u32,
-    pub backing_plane: u32,
-    pub backing_pixel: u32,
-    pub override_redirect: u8,
-    pub save_under: u8,
-    pub event_mask: u32,
-    pub do_not_propogate_mask: u32,
-    pub colormap: u32,
-    pub cursor: u32,
+#[derive(Debug)]
+pub struct GenericWindow {
+    pub opcode: u8,
+    pub pad0: u8,
+    pub length: u16,
+    pub wid: u32,
 }
-*/
 
 #[repr(packed, C)]
 #[derive(Debug)]
@@ -223,6 +210,10 @@ pub fn decode_slice<'a, T>(bytes: &'a [u8], length: usize) -> &'a [T] {
 
         std::slice::from_raw_parts(bytes.as_ptr() as *const T, length)
     }
+}
+
+pub fn pad(len: usize) -> Vec<u8> {
+    vec![0; (4 - (len % 4)) % 4]
 }
 
 

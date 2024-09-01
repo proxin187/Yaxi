@@ -3,10 +3,12 @@
 pub enum Error {
     InvalidOpcode,
     InvalidStatus,
-    SetupFailed,
     Authenthicate,
     RanOutOfXid,
     NoScreens,
+    SetupFailed {
+        reason: String,
+    },
     Event {
         detail: u8,
         sequence: u16,
@@ -28,9 +30,6 @@ impl std::fmt::Display for Error {
             Error::InvalidStatus => {
                 f.write_str("server responded with invalid status code")
             },
-            Error::SetupFailed => {
-                f.write_str("connection initiation setup failed")
-            },
             Error::Authenthicate => {
                 f.write_str("authenthication required")
             },
@@ -39,6 +38,9 @@ impl std::fmt::Display for Error {
             },
             Error::NoScreens => {
                 f.write_str("server never informed of any screens")
+            },
+            Error::SetupFailed { reason } => {
+                f.write_fmt(format_args!("connection initiation setup failed: {}", reason))
             },
             Error::Event { detail, sequence } => {
                 f.write_fmt(format_args!("[error event] detail={}, sequence={}", detail, sequence))

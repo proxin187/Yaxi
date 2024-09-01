@@ -1,4 +1,11 @@
+use std::sync::atomic::{Ordering, AtomicU16};
+use std::sync::{Arc, Mutex};
 
+macro_rules! lock {
+    ($mutex:expr) => {
+        $mutex.lock().map_err(|_| Into::<Box<dyn std::error::Error>>::into("failed to lock mutex"))
+    }
+}
 
 #[non_exhaustive]
 pub struct Response;
@@ -16,6 +23,8 @@ pub struct Opcode;
 
 impl Opcode {
     pub const CREATE_WINDOW: u8 = 1;
+    pub const DESTROY_WINDOW: u8 = 4;
+    pub const MAP_WINDOW: u8 = 8;
 }
 
 #[non_exhaustive]
@@ -39,6 +48,51 @@ impl ErrorCode {
     pub const NAME: u8 = 15;
     pub const LENGTH: u8 = 16;
     pub const IMPLEMENTATION: u8 = 17;
+}
+
+pub enum ReplyKind {
+    InternAtom,
+}
+
+pub struct Sequence {
+    id: u16,
+    kind: ReplyKind,
+}
+
+impl Sequence {
+    pub fn new(id: u16, kind: ReplyKind) -> Sequence {
+        Sequence {
+            id,
+            kind,
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct SequenceManager {
+    id: Arc<AtomicU16>,
+    sequences: Arc<Mutex<Vec<Sequence>>>,
+}
+
+impl SequenceManager {
+    pub fn new() -> SequenceManager {
+        SequenceManager {
+            id: Arc::new(AtomicU16::default()),
+            sequences: Arc::new(Mutex::new(Vec::new())),
+        }
+    }
+
+    pub fn next(&mut self, kind: Option<ReplyKind>) -> Result<(), Box<dyn std::error::Error>> {
+        let mut lock = lock!(self.sequences)?;
+
+        if let Some(kind) = kind {
+            lock.push(Sequence::new(self.id.load(Ordering::Relaxed), kind));
+        }
+
+        self.id.fetch_add(1, Ordering::Relaxed);
+
+        Ok(())
+    }
 }
 
 pub enum EventKind {

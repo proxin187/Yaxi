@@ -7,6 +7,7 @@ pub enum WindowClass {
     InputOnly = 2,
 }
 
+// VisualId is not an enumerator, rather its a form of id like wid, atoms and so on
 #[derive(Clone, Copy)]
 pub enum VisualClass {
     StaticGray = 0,
@@ -204,19 +205,36 @@ pub struct WindowArguments {
 
 pub struct Window<T> {
     stream: Stream<T>,
+    sequence: SequenceManager,
     visual: VisualClass,
     depth: u8,
     id: u32,
 }
 
 impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
-    pub fn new(stream: Stream<T>, visual: VisualClass, depth: u8, id: u32) -> Window<T> {
+    pub fn new(stream: Stream<T>, sequence: SequenceManager, visual: VisualClass, depth: u8, id: u32) -> Window<T> {
         Window {
             stream,
+            sequence,
             visual,
             depth,
             id,
         }
+    }
+
+    fn generic_window(&mut self, opcode: u8, length: u16) -> Result<(), Box<dyn std::error::Error>> {
+        let generic_window = GenericWindow {
+            opcode,
+            pad0: 0,
+            length,
+            wid: self.id(),
+        };
+
+        self.stream.inner.write_all(request::encode(&generic_window))?;
+
+        self.sequence.next(None)?;
+
+        Ok(())
     }
 
     pub fn id(&self) -> u32 { self.id }
@@ -224,9 +242,6 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
     pub fn depth(&self) -> u8 { self.depth }
 
     pub fn visual(&self) -> VisualClass { self.visual }
-
-    // TODO: this function is the problem
-    // its most likely related to window values
 
     pub fn create_window(&mut self, mut window: WindowArguments) -> Result<Window<T>, Box<dyn std::error::Error>> {
         let window_values_request = window.values.build()?;
@@ -249,14 +264,19 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
 
         self.stream.inner.write_all(request::encode(&window_request))?;
 
-        // TODO: it only seems like it writes the arguments it knows its going to use
-        // only the arguments u use are sendt
+        self.stream.inner.write_all(&window_values_request)?;
 
-        // self.stream.inner.write_all(request::encode(&window_values_request))?;
+        self.sequence.next(None)?;
 
-        // TODO: SEQUENCE THINGY
+        Ok(Window::new(self.stream.try_clone()?, self.sequence.clone(), window.visual, window_request.depth, window_request.wid))
+    }
 
-        Ok(Window::new(self.stream.try_clone()?, window.visual, window_request.depth, window_request.wid))
+    pub fn destroy(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        self.generic_window(Opcode::DESTROY_WINDOW, 2)
+    }
+
+    pub fn map(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        self.generic_window(Opcode::MAP_WINDOW, 2)
     }
 
     pub fn grab_key(&mut self) {
