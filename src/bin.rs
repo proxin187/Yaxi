@@ -1,9 +1,16 @@
 use xrs::display::window::{WindowArguments, WindowValuesBuilder, WindowClass, VisualClass};
 use xrs::display::Authenthication;
 use xrs::display;
+use xrs::display::auth::*;
 
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut auth = XAuth::new()?;
+
+    let entry = auth.entry()?;
+
+    println!("entry: {:?}", entry);
+
     // maybe we need to interpret the key as hex and then convert it to bytes?
     // looks like we need to interpret it in a very special way according to the qoute below.
     //
@@ -14,11 +21,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // For example, a 32 character hexkey would represent a 128-bit value.
     // A protocol name consisting of just a single period is treated as an abbreviation for MIT-MAGIC-COOKIE-1.
 
+    /*
     let display = display::open_unix(0, Authenthication::new("MIT-MAGIC-COOKIE-1", "850906d76c379118dc386abadf380652"))?;
 
     let mut root = display.default_root_window()?;
 
     println!("root_depth: {}", root.depth());
+    */
 
     /*
     let mut window = root.create_window(WindowArguments {

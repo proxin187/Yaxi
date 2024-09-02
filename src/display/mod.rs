@@ -3,6 +3,7 @@ pub mod error;
 mod request;
 mod proto;
 mod xid;
+pub mod auth;
 
 use error::Error;
 use proto::*;
@@ -96,10 +97,29 @@ impl<'a> Authenthication<'a> {
         }
     }
 
-    pub fn to_bytes(&self) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-        let data = u128::from_str_radix(self.data, 16);
+    fn to_bytes(&self, data: u128) -> Vec<u8> {
+        if cfg!(target_endian = "little") {
+            data.to_le_bytes().to_vec()
+        } else {
+            data.to_be_bytes().to_vec()
+        }
+    }
 
-        Ok([self.name.as_bytes().to_vec(), request::pad(self.name.len()), request::encode(&data).to_vec(), request::pad(self.data.len())].concat())
+    // The data is specified as an even-lengthed string of hexadecimal digits, each pair representing one octet.
+    // The first digit of each pair gives the most significant 4 bits of the octet, and the second digit of the pair gives the least significant 4 bits.
+    // For example, a 32 character hexkey would represent a 128-bit value.
+    // A protocol name consisting of just a single period is treated as an abbreviation for MIT-MAGIC-COOKIE-1.
+
+    // bit shift to the right after each round
+    // 0000 1111
+
+    pub fn encode(&self) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+        let data = self.data.chars()
+            .collect::<Vec<char>>()
+            .windows(2)
+            .fold(0u128, |acc, x| { /* for byte in acc.to_le_bytes().iter() { println!("{:08b}", byte); };*/ (acc >> 8) | (request::hexchar(x[0]).unwrap() << 120) | (request::hexchar(x[1]).unwrap() << 120) });
+
+        Ok([self.name.as_bytes().to_vec(), request::pad(self.name.len()), self.to_bytes(data), request::pad(self.data.len())].concat())
     }
 }
 
@@ -194,11 +214,11 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
         // TODO: implement authenthication, name is the autherization name and data is the value
         // also implement better error messages
 
-        let request = SetupRequest::new(self.endian(), X_PROTOCOL, X_PROTOCOL_REVISION, auth.name.len() as u16, auth.data.len() as u16);
+        let request = SetupRequest::new(self.endian(), X_PROTOCOL, X_PROTOCOL_REVISION, auth.name.len() as u16, 16);
 
         self.stream.inner.write_all(request::encode(&request))?;
 
-        self.stream.inner.write_all(&auth.to_bytes()?)?;
+        self.stream.inner.write_all(&auth.encode()?)?;
 
         let response: SetupResponse = self.stream.recv_decode()?;
 
