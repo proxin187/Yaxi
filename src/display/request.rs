@@ -71,7 +71,7 @@ pub struct PixmapFormat {
 
 #[repr(packed, C)]
 #[derive(Debug)]
-pub struct Screen {
+pub struct ScreenResponse {
     pub root: u32,
     pub default_colormap: u32,
     pub white_pixel: u32,
@@ -92,7 +92,7 @@ pub struct Screen {
 
 #[repr(packed, C)]
 #[derive(Debug)]
-pub struct Depth {
+pub struct DepthResponse {
     pub depth: u8,
     pub pad0: u8,
     pub visuals_len: u16,
@@ -215,11 +215,5 @@ pub fn decode_slice<'a, T>(bytes: &'a [u8], length: usize) -> &'a [T] {
 pub fn pad(len: usize) -> Vec<u8> {
     vec![0; (4 - (len % 4)) % 4]
 }
-
-pub fn hexchar(character: char) -> Result<u128, Box<dyn std::error::Error>> {
-    u128::from_str_radix(character.to_string().as_str(), 16)
-        .map_err(|err| err.into())
-}
-
 
 

@@ -1,47 +1,58 @@
+use super::Stream;
+
 use std::fs::File;
-use std::io::Read;
 use std::env;
+use std::mem;
 
 
 #[derive(Debug)]
 pub struct Entry {
-    name: Vec<u8>,
-    data: Vec<u8>,
+    family: u16,
+    address: Vec<u8>,
+    number: Vec<u8>,
+    pub name: Vec<u8>,
+    pub data: Vec<u8>,
 }
 
 pub struct XAuth {
-    file: File,
+    file: Stream<File>,
 }
 
 impl XAuth {
     pub fn new() -> Result<XAuth, Box<dyn std::error::Error>> {
+        let file = File::options()
+            .read(true)
+            .write(true)
+            .open(env::var("XAUTHORITY")?)?;
+
         Ok(XAuth {
-            file: File::open(env::var("XAUTHORITY")?)?,
+            file: Stream::new(file),
         })
     }
 
-    fn read(&mut self, size: usize) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-        let mut buf: Vec<u8> = vec![0u8; size];
-
-        self.file.read_exact(&mut buf)?;
-
-        Ok(buf)
-    }
-
     fn value(&mut self) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-        let size = self.read(2)?;
+        let size = self.file.recv(mem::size_of::<u16>())?;
 
-        self.read(((size[0] as u16) << 8 | size[1] as u16) as usize)
+        self.file.recv(((size[0] as u16) << 8 | size[1] as u16) as usize)
     }
 
     pub fn entry(&mut self) -> Result<Entry, Box<dyn std::error::Error>> {
-        // TODO: finish up whatever tf this is
+        let family = self.file.recv(mem::size_of::<u16>())?;
 
         Ok(Entry {
+            family: (family[0] as u16) << 8 | family[1] as u16,
+            address: self.value()?,
+            number: self.value()?,
             name: self.value()?,
             data: self.value()?,
         })
     }
+}
+
+pub fn entry() -> Result<Entry, Box<dyn std::error::Error>> {
+    let mut auth = XAuth::new()?;
+
+    auth.entry()
 }
 
 

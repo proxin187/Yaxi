@@ -203,6 +203,20 @@ pub struct WindowArguments {
     pub values: WindowValuesBuilder,
 }
 
+pub enum WindowKind {
+    Window,
+    SubWindows,
+}
+
+impl WindowKind {
+    fn encode(&self, subwindows: u8, window: u8) -> u8 {
+        match self {
+            WindowKind::Window => window,
+            WindowKind::SubWindows => subwindows,
+        }
+    }
+}
+
 pub struct Window<T> {
     stream: Stream<T>,
     sequence: SequenceManager,
@@ -271,12 +285,16 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
         Ok(Window::new(self.stream.try_clone()?, self.sequence.clone(), window.visual, window_request.depth, window_request.wid))
     }
 
-    pub fn destroy(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        self.generic_window(Opcode::DESTROY_WINDOW, 2)
+    pub fn destroy(&mut self, kind: WindowKind) -> Result<(), Box<dyn std::error::Error>> {
+        self.generic_window(kind.encode(Opcode::DESTROY_SUBWINDOWS, Opcode::DESTROY_WINDOW), 2)
     }
 
-    pub fn map(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        self.generic_window(Opcode::MAP_WINDOW, 2)
+    pub fn map(&mut self, kind: WindowKind) -> Result<(), Box<dyn std::error::Error>> {
+        self.generic_window(kind.encode(Opcode::MAP_SUBWINDOWS, Opcode::MAP_WINDOW), 2)
+    }
+
+    pub fn unmap(&mut self, kind: WindowKind) -> Result<(), Box<dyn std::error::Error>> {
+        self.generic_window(kind.encode(Opcode::UNMAP_SUBWINDOWS, Opcode::UNMAP_WINDOW), 2)
     }
 
     pub fn grab_key(&mut self) {

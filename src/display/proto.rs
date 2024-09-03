@@ -24,7 +24,11 @@ pub struct Opcode;
 impl Opcode {
     pub const CREATE_WINDOW: u8 = 1;
     pub const DESTROY_WINDOW: u8 = 4;
+    pub const DESTROY_SUBWINDOWS: u8 = 5;
     pub const MAP_WINDOW: u8 = 8;
+    pub const MAP_SUBWINDOWS: u8 = 9;
+    pub const UNMAP_WINDOW: u8 = 10;
+    pub const UNMAP_SUBWINDOWS: u8 = 11;
 }
 
 #[non_exhaustive]

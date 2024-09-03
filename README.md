@@ -11,6 +11,7 @@
 ## Roadmap
 
 - [X] Connection Setup
-- [ ] Authorization
+- [X] Authorization
+- [ ] Most functions
 
 

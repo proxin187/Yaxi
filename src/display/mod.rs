@@ -2,8 +2,8 @@ pub mod window;
 pub mod error;
 mod request;
 mod proto;
+mod auth;
 mod xid;
-pub mod auth;
 
 use error::Error;
 use proto::*;
@@ -14,6 +14,7 @@ use std::os::unix::net::UnixStream;
 use std::net::{SocketAddr, TcpStream};
 use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
+use std::fs::File;
 use std::thread;
 
 // https://www.x.org/docs/XProtocol/proto.pdf
@@ -22,9 +23,16 @@ const X_TCP_PORT: u16 = 6000;
 const X_PROTOCOL: u16 = 11;
 const X_PROTOCOL_REVISION: u16 = 0;
 
-
 pub trait TryClone {
     fn try_clone(&self) -> Result<Box<Self>, Box<dyn std::error::Error>>;
+}
+
+impl TryClone for File {
+    fn try_clone(&self) -> Result<Box<File>, Box<dyn std::error::Error>> {
+        self.try_clone()
+            .map(|stream| Box::new(stream))
+            .map_err(|err| err.into())
+    }
 }
 
 impl TryClone for TcpStream {
@@ -60,6 +68,18 @@ impl<T> Stream<T> where T: Send + Sync + Read + Write + TryClone {
         })
     }
 
+    fn send(&mut self, request: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
+        self.inner.write_all(request).map_err(|err| err.into())
+    }
+
+    fn send_arr(&mut self, requests: &[Vec<u8>]) -> Result<(), Box<dyn std::error::Error>> {
+        for request in requests {
+            self.send(request)?;
+        }
+
+        Ok(())
+    }
+
     fn recv(&mut self, size: usize) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
         let mut buffer = vec![0u8; size];
 
@@ -84,42 +104,21 @@ impl<T> Stream<T> where T: Send + Sync + Read + Write + TryClone {
     }
 }
 
-pub struct Authenthication<'a> {
-    name: &'a str,
-    data: &'a str,
+// TODO: FINISH THIS
+pub struct Depth {
 }
 
-impl<'a> Authenthication<'a> {
-    pub fn new(name: &'a str, data: &'a str) -> Authenthication<'a> {
-        Authenthication {
-            name,
-            data,
+pub struct Screen {
+    response: ScreenResponse,
+    visuals: Vec<Visual>,
+}
+
+impl Screen {
+    pub fn new(response: ScreenResponse) -> Screen {
+        Screen {
+            response,
+            visuals: Vec::new(),
         }
-    }
-
-    fn to_bytes(&self, data: u128) -> Vec<u8> {
-        if cfg!(target_endian = "little") {
-            data.to_le_bytes().to_vec()
-        } else {
-            data.to_be_bytes().to_vec()
-        }
-    }
-
-    // The data is specified as an even-lengthed string of hexadecimal digits, each pair representing one octet.
-    // The first digit of each pair gives the most significant 4 bits of the octet, and the second digit of the pair gives the least significant 4 bits.
-    // For example, a 32 character hexkey would represent a 128-bit value.
-    // A protocol name consisting of just a single period is treated as an abbreviation for MIT-MAGIC-COOKIE-1.
-
-    // bit shift to the right after each round
-    // 0000 1111
-
-    pub fn encode(&self) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-        let data = self.data.chars()
-            .collect::<Vec<char>>()
-            .windows(2)
-            .fold(0u128, |acc, x| { /* for byte in acc.to_le_bytes().iter() { println!("{:08b}", byte); };*/ (acc >> 8) | (request::hexchar(x[0]).unwrap() << 120) | (request::hexchar(x[1]).unwrap() << 120) });
-
-        Ok([self.name.as_bytes().to_vec(), request::pad(self.name.len()), self.to_bytes(data), request::pad(self.data.len())].concat())
     }
 }
 
@@ -131,7 +130,7 @@ pub struct Display<T> {
 }
 
 impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
-    pub fn connect<'a>(inner: T, auth: Authenthication<'a>) -> Result<Display<T>, Box<dyn std::error::Error>> {
+    pub fn connect<'a>(inner: T) -> Result<Display<T>, Box<dyn std::error::Error>> {
         let mut display = Display {
             stream: Stream::new(inner),
             events: Arc::new(Mutex::new(Vec::new())),
@@ -139,7 +138,7 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
             sequence: SequenceManager::new(),
         };
 
-        display.setup(auth)?;
+        display.setup()?;
 
         Ok(display)
     }
@@ -148,7 +147,7 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
         let stream = self.stream.try_clone()?;
         let screen = self.roots.first().ok_or(Error::NoScreens)?;
 
-        Ok(Window::<T>::new(stream, self.sequence.clone(), VisualClass::from(screen.root_visual), screen.root_depth, screen.root))
+        Ok(Window::<T>::new(stream, self.sequence.clone(), VisualClass::from(screen.response.root_visual), screen.response.root_depth, screen.response.root))
     }
 
     fn endian(&self) -> u8 {
@@ -173,10 +172,10 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
         // println!("formats: {:?}", formats);
 
         for _ in 0..response.roots_len {
-            let screen: Screen = self.stream.recv_decode()?;
+            let screen = Screen::new(self.stream.recv_decode()?);
 
-            for _ in 0..screen.allowed_depths_len {
-                let depth: Depth = self.stream.recv_decode()?;
+            for _ in 0..screen.response.allowed_depths_len {
+                let depth: DepthResponse = self.stream.recv_decode()?;
 
                 let bytes = self.stream.recv(std::mem::size_of::<Visual>() * depth.visuals_len as usize)?;
 
@@ -206,19 +205,14 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
         Ok(())
     }
 
-    fn setup<'a>(&mut self, auth: Authenthication<'a>) -> Result<(), Box<dyn std::error::Error>> {
-        // TODO: connection setup fails when connecting to main server
-        // looks like its related to authenthication, for some reason it only happends
-        // TEST OUT: xauth
+    fn setup<'a>(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        let entry = auth::entry()?;
 
-        // TODO: implement authenthication, name is the autherization name and data is the value
-        // also implement better error messages
+        let request = SetupRequest::new(self.endian(), X_PROTOCOL, X_PROTOCOL_REVISION, entry.name.len() as u16, entry.data.len() as u16);
 
-        let request = SetupRequest::new(self.endian(), X_PROTOCOL, X_PROTOCOL_REVISION, auth.name.len() as u16, 16);
+        self.stream.send(request::encode(&request))?;
 
-        self.stream.inner.write_all(request::encode(&request))?;
-
-        self.stream.inner.write_all(&auth.encode()?)?;
+        self.stream.send_arr(&[entry.name.clone(), request::pad(entry.name.len()), entry.data.clone(), request::pad(entry.data.len())])?;
 
         let response: SetupResponse = self.stream.recv_decode()?;
 
@@ -289,20 +283,20 @@ impl<T> EventListener<T> where T: Send + Sync + Read + Write + TryClone {
     }
 }
 
-pub fn open_tcp<'a>(display: u16, auth: Authenthication<'a>) -> Result<Display<TcpStream>, Box<dyn std::error::Error>> {
+pub fn open_tcp<'a>(display: u16) -> Result<Display<TcpStream>, Box<dyn std::error::Error>> {
     let stream = TcpStream::connect(SocketAddr::from(([127, 0, 0, 1], X_TCP_PORT + display)))?;
 
     stream.set_nonblocking(false)?;
 
-    Ok(Display::connect(stream, auth)?)
+    Ok(Display::connect(stream)?)
 }
 
-pub fn open_unix<'a>(display: u16, auth: Authenthication<'a>) -> Result<Display<UnixStream>, Box<dyn std::error::Error>> {
+pub fn open_unix<'a>(display: u16) -> Result<Display<UnixStream>, Box<dyn std::error::Error>> {
     let stream = UnixStream::connect(format!("/tmp/.X11-unix/X{}", display))?;
 
     stream.set_nonblocking(false)?;
 
-    Ok(Display::connect(stream, auth)?)
+    Ok(Display::connect(stream)?)
 }
 
 
