@@ -100,8 +100,8 @@ pub struct DepthResponse {
 }
 
 #[repr(packed, C)]
-#[derive(Debug)]
-pub struct Visual {
+#[derive(Debug, Clone, Copy)]
+pub struct VisualResponse {
     pub visual_id: u32,
     pub class: u8,
     pub bits_per_rgb_value: u8,
@@ -174,6 +174,16 @@ pub struct GenericWindow {
     pub pad0: u8,
     pub length: u16,
     pub wid: u32,
+}
+
+#[repr(packed, C)]
+#[derive(Debug)]
+pub struct InternAtom {
+    pub opcode: u8,
+    pub only_if_exists: u8,
+    pub length: u16,
+    pub name_len: u16,
+    pub pad1: [u8; 2],
 }
 
 #[repr(packed, C)]

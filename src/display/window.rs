@@ -7,28 +7,25 @@ pub enum WindowClass {
     InputOnly = 2,
 }
 
-// VisualId is not an enumerator, rather its a form of id like wid, atoms and so on
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub enum VisualClass {
     StaticGray = 0,
     GrayScale = 1,
     StaticColor = 2,
     PsuedoColor = 3,
     TrueColor = 4,
-    DirectColor = 33,
+    DirectColor = 5,
 }
 
-impl From<u32> for VisualClass {
-    fn from(value: u32) -> VisualClass {
-        println!("value: {}", value);
-
+impl From<u8> for VisualClass {
+    fn from(value: u8) -> VisualClass {
         match value {
             0 => VisualClass::StaticGray,
             1 => VisualClass::GrayScale,
             2 => VisualClass::StaticColor,
             3 => VisualClass::PsuedoColor,
             4 => VisualClass::TrueColor,
-            33 => VisualClass::DirectColor,
+            5 => VisualClass::DirectColor,
             _ => unreachable!(),
         }
     }
@@ -199,7 +196,7 @@ pub struct WindowArguments {
     pub height: u16,
     pub border_width: u16,
     pub class: WindowClass,
-    pub visual: VisualClass,
+    pub visual: Visual,
     pub values: WindowValuesBuilder,
 }
 
@@ -220,13 +217,13 @@ impl WindowKind {
 pub struct Window<T> {
     stream: Stream<T>,
     sequence: SequenceManager,
-    visual: VisualClass,
+    visual: Visual,
     depth: u8,
     id: u32,
 }
 
 impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
-    pub fn new(stream: Stream<T>, sequence: SequenceManager, visual: VisualClass, depth: u8, id: u32) -> Window<T> {
+    pub fn new(stream: Stream<T>, sequence: SequenceManager, visual: Visual, depth: u8, id: u32) -> Window<T> {
         Window {
             stream,
             sequence,
@@ -255,7 +252,7 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
 
     pub fn depth(&self) -> u8 { self.depth }
 
-    pub fn visual(&self) -> VisualClass { self.visual }
+    pub fn visual(&self) -> Visual { self.visual.clone() }
 
     pub fn create_window(&mut self, mut window: WindowArguments) -> Result<Window<T>, Box<dyn std::error::Error>> {
         let window_values_request = window.values.build()?;
@@ -272,7 +269,7 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
             height: window.height,
             border_width: window.border_width,
             class: window.class as u16,
-            visual: window.visual as u32,
+            visual: window.visual.id,
             value_mask: window.values.value_mask,
         };
 

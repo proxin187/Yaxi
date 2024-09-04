@@ -104,20 +104,51 @@ impl<T> Stream<T> where T: Send + Sync + Read + Write + TryClone {
     }
 }
 
-// TODO: FINISH THIS
+#[derive(Debug, Clone)]
+pub struct Visual {
+    pub id: u32,
+    pub class: VisualClass,
+}
+
+impl Visual {
+    pub fn new(response: VisualResponse) -> Visual {
+        Visual {
+            id: response.visual_id,
+            class: VisualClass::from(response.class),
+        }
+    }
+}
+
 pub struct Depth {
+    depth: u8,
+    length: u16,
+    visuals: Vec<Visual>,
+}
+
+impl Depth {
+    pub fn new(response: DepthResponse) -> Depth {
+        Depth {
+            depth: response.depth,
+            length: response.visuals_len,
+            visuals: Vec::new(),
+        }
+    }
+
+    pub fn extend(&mut self, responses: &[VisualResponse]) {
+        self.visuals.extend(responses.iter().map(|response| Visual::new(*response)));
+    }
 }
 
 pub struct Screen {
     response: ScreenResponse,
-    visuals: Vec<Visual>,
+    depths: Vec<Depth>,
 }
 
 impl Screen {
     pub fn new(response: ScreenResponse) -> Screen {
         Screen {
             response,
-            visuals: Vec::new(),
+            depths: Vec::new(),
         }
     }
 }
@@ -147,7 +178,31 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
         let stream = self.stream.try_clone()?;
         let screen = self.roots.first().ok_or(Error::NoScreens)?;
 
-        Ok(Window::<T>::new(stream, self.sequence.clone(), VisualClass::from(screen.response.root_visual), screen.response.root_depth, screen.response.root))
+        Ok(Window::<T>::new(stream, self.sequence.clone(), self.visual_from_id(screen.response.root_visual)?, screen.response.root_depth, screen.response.root))
+    }
+
+    pub fn visual_from_id(&self, id: u32) -> Result<Visual, Box<dyn std::error::Error>> {
+        for screen in &self.roots {
+            for depth in &screen.depths {
+                match depth.visuals.iter().find(|visual| visual.id == id) {
+                    Some(visual) => return Ok(visual.clone()),
+                    None => {},
+                }
+            }
+        }
+
+        Err(Box::new(Error::InvalidId))
+    }
+
+    pub fn intern_atom(&self, name: &str, oix: bool) {
+        // TODO: finish this
+        let request = InternAtom {
+            opcode: Opcode::INTERN_ATOM,
+            only_if_exists: oix.then(|| 0).unwrap_or(1),
+            length: 2 + (name.len() as u16 + request::pad(name.len()).len() as u16) / 4,
+        };
+
+        self.stream.send(request::encode(&request))?;
     }
 
     fn endian(&self) -> u8 {
@@ -163,7 +218,7 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
 
         let vendor = self.stream.recv_str(response.vendor_len as usize)?;
 
-        // println!("vendor: {}", vendor);
+        println!("vendor: {}", vendor);
 
         let bytes = self.stream.recv(std::mem::size_of::<PixmapFormat>() * response.pixmap_formats_len as usize)?;
 
@@ -172,17 +227,16 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
         // println!("formats: {:?}", formats);
 
         for _ in 0..response.roots_len {
-            let screen = Screen::new(self.stream.recv_decode()?);
+            let mut screen = Screen::new(self.stream.recv_decode()?);
 
             for _ in 0..screen.response.allowed_depths_len {
-                let depth: DepthResponse = self.stream.recv_decode()?;
+                let mut depth = Depth::new(self.stream.recv_decode()?);
 
-                let bytes = self.stream.recv(std::mem::size_of::<Visual>() * depth.visuals_len as usize)?;
+                let bytes = self.stream.recv(std::mem::size_of::<VisualResponse>() * depth.length as usize)?;
 
-                // TODO: append visuals
-                let visuals: &[Visual] = request::decode_slice(&bytes, depth.visuals_len as usize);
+                depth.extend(request::decode_slice(&bytes, depth.length as usize));
 
-                // println!("visuals: {:?}", visuals);
+                screen.depths.push(depth);
             }
 
             self.roots.push(screen);
@@ -240,10 +294,15 @@ impl<T> EventListener<T> where T: Send + Sync + Read + Write + TryClone {
         }
     }
 
-    fn handle_reply(&mut self, event: GenericEvent) {
-        match event.sequence {
-            _ => {},
+    fn handle_reply(&mut self, event: GenericEvent) -> Result<(), Box<dyn std::error::Error>> {
+        let sequence = self.sequence.get(event.sequence)?;
+
+        match sequence.kind {
+            ReplyKind::InternAtom => {
+            },
         }
+
+        Ok(())
     }
 
     fn handle_event(&mut self, event: GenericEvent) -> Result<(), Box<dyn std::error::Error>> {
@@ -259,7 +318,7 @@ impl<T> EventListener<T> where T: Send + Sync + Read + Write + TryClone {
                 }))
             },
             Response::REPLY => {
-                self.handle_reply(event);
+                self.handle_reply(event)?;
 
                 Ok(())
             },

@@ -6,6 +6,7 @@ pub enum Error {
     Authenthicate,
     RanOutOfXid,
     NoScreens,
+    InvalidId,
     SetupFailed {
         reason: String,
     },
@@ -38,6 +39,9 @@ impl std::fmt::Display for Error {
             },
             Error::NoScreens => {
                 f.write_str("server never informed of any screens")
+            },
+            Error::InvalidId => {
+                f.write_str("invalid id")
             },
             Error::SetupFailed { reason } => {
                 f.write_fmt(format_args!("connection initiation setup failed: {}", reason))

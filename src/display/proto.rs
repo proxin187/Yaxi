@@ -1,3 +1,5 @@
+use super::Error;
+
 use std::sync::atomic::{Ordering, AtomicU16};
 use std::sync::{Arc, Mutex};
 
@@ -29,6 +31,7 @@ impl Opcode {
     pub const MAP_SUBWINDOWS: u8 = 9;
     pub const UNMAP_WINDOW: u8 = 10;
     pub const UNMAP_SUBWINDOWS: u8 = 11;
+    pub const INTERN_ATOM: u8 = 16;
 }
 
 #[non_exhaustive]
@@ -59,8 +62,8 @@ pub enum ReplyKind {
 }
 
 pub struct Sequence {
-    id: u16,
-    kind: ReplyKind,
+    pub id: u16,
+    pub kind: ReplyKind,
 }
 
 impl Sequence {
@@ -83,6 +86,15 @@ impl SequenceManager {
         SequenceManager {
             id: Arc::new(AtomicU16::default()),
             sequences: Arc::new(Mutex::new(Vec::new())),
+        }
+    }
+
+    pub fn get(&mut self, id: u16) -> Result<Sequence, Box<dyn std::error::Error>> {
+        let mut lock = lock!(self.sequences)?;
+
+        match lock.iter().position(|sequence| sequence.id == id) {
+            Some(index) => Ok(lock.remove(index)),
+            None => Err(Box::new(Error::InvalidId)),
         }
     }
 
