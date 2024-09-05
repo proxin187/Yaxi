@@ -57,10 +57,12 @@ impl ErrorCode {
     pub const IMPLEMENTATION: u8 = 17;
 }
 
+#[derive(Debug)]
 pub enum ReplyKind {
     InternAtom,
 }
 
+#[derive(Debug)]
 pub struct Sequence {
     pub id: u16,
     pub kind: ReplyKind,
@@ -92,26 +94,38 @@ impl SequenceManager {
     pub fn get(&mut self, id: u16) -> Result<Sequence, Box<dyn std::error::Error>> {
         let mut lock = lock!(self.sequences)?;
 
+        println!("[get] sequences={:?}, id={}", lock, id);
+
         match lock.iter().position(|sequence| sequence.id == id) {
             Some(index) => Ok(lock.remove(index)),
             None => Err(Box::new(Error::InvalidId)),
         }
     }
 
-    pub fn next(&mut self, kind: Option<ReplyKind>) -> Result<(), Box<dyn std::error::Error>> {
-        let mut lock = lock!(self.sequences)?;
-
-        if let Some(kind) = kind {
-            lock.push(Sequence::new(self.id.load(Ordering::Relaxed), kind));
-        }
-
+    pub fn skip(&mut self) {
         self.id.fetch_add(1, Ordering::Relaxed);
+    }
+
+    pub fn append(&mut self, kind: ReplyKind) -> Result<(), Box<dyn std::error::Error>> {
+        self.skip();
+
+        lock!(self.sequences)?.push(Sequence::new(self.id.load(Ordering::Relaxed), kind));
 
         Ok(())
     }
 }
 
-pub enum EventKind {
+#[derive(Debug)]
+pub enum Event {
+    KeyEvent {
+    },
+}
+
+#[derive(Debug)]
+pub enum Reply {
+    InternAtom {
+        atom: u32
+    },
 }
 
 

@@ -12,6 +12,7 @@
 
 - [X] Connection Setup
 - [X] Authorization
-- [ ] Most functions
+- [X] Requests and Replies
+- [ ] Window Manager in xrs
 
 

@@ -1,7 +1,7 @@
 pub mod window;
 pub mod error;
+pub mod proto;
 mod request;
-mod proto;
 mod auth;
 mod xid;
 
@@ -16,6 +16,12 @@ use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
 use std::fs::File;
 use std::thread;
+
+macro_rules! lock {
+    ($mutex:expr) => {
+        $mutex.lock().map_err(|_| Into::<Box<dyn std::error::Error>>::into("failed to lock mutex"))
+    }
+}
 
 // https://www.x.org/docs/XProtocol/proto.pdf
 
@@ -80,6 +86,14 @@ impl<T> Stream<T> where T: Send + Sync + Read + Write + TryClone {
         Ok(())
     }
 
+    fn send_pad(&mut self, request: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
+        self.send(request)?;
+
+        self.send(&request::pad(request.len()))?;
+
+        Ok(())
+    }
+
     fn recv(&mut self, size: usize) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
         let mut buffer = vec![0u8; size];
 
@@ -102,6 +116,10 @@ impl<T> Stream<T> where T: Send + Sync + Read + Write + TryClone {
 
         Ok(request::decode(&bytes))
     }
+}
+
+pub struct Atom {
+    id: u32,
 }
 
 #[derive(Debug, Clone)]
@@ -155,7 +173,8 @@ impl Screen {
 
 pub struct Display<T> {
     stream: Stream<T>,
-    events: Arc<Mutex<Vec<EventKind>>>,
+    events: Arc<Mutex<Vec<Event>>>,
+    replies: Arc<Mutex<Vec<Reply>>>,
     roots: Vec<Screen>,
     sequence: SequenceManager,
 }
@@ -165,6 +184,7 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
         let mut display = Display {
             stream: Stream::new(inner),
             events: Arc::new(Mutex::new(Vec::new())),
+            replies: Arc::new(Mutex::new(Vec::new())),
             roots: Vec::new(),
             sequence: SequenceManager::new(),
         };
@@ -172,6 +192,16 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
         display.setup()?;
 
         Ok(display)
+    }
+
+    pub fn poll_reply(&mut self) -> Result<bool, Box<dyn std::error::Error>> {
+        Ok(!lock!(self.replies)?.is_empty())
+    }
+
+    pub fn wait_for_reply(&mut self) -> Result<Reply, Box<dyn std::error::Error>> {
+        while !self.poll_reply()? {}
+
+        lock!(self.replies)?.pop().ok_or(Box::new(Error::NoReply))
     }
 
     pub fn default_root_window(&self) -> Result<Window<T>, Box<dyn std::error::Error>> {
@@ -194,15 +224,22 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
         Err(Box::new(Error::InvalidId))
     }
 
-    pub fn intern_atom(&self, name: &str, oix: bool) {
-        // TODO: finish this
+    pub fn intern_atom(&mut self, name: &str, only_if_exists: bool) -> Result<(), Box<dyn std::error::Error>> {
         let request = InternAtom {
             opcode: Opcode::INTERN_ATOM,
-            only_if_exists: oix.then(|| 0).unwrap_or(1),
+            only_if_exists: only_if_exists.then(|| 1).unwrap_or(0),
             length: 2 + (name.len() as u16 + request::pad(name.len()).len() as u16) / 4,
+            name_len: name.len() as u16,
+            pad1: [0u8; 2],
         };
 
         self.stream.send(request::encode(&request))?;
+
+        self.stream.send_pad(name.as_bytes())?;
+
+        self.sequence.append(ReplyKind::InternAtom)?;
+
+        Ok(())
     }
 
     fn endian(&self) -> u8 {
@@ -244,10 +281,11 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
 
         let stream = self.stream.try_clone()?;
         let events = self.events.clone();
+        let replies = self.replies.clone();
         let sequence = self.sequence.clone();
 
         thread::spawn(move || {
-            let mut listener = EventListener::new(stream, events, sequence);
+            let mut listener = EventListener::new(stream, events, replies, sequence);
 
             if let Err(err) = listener.listen() {
                 println!("[ERROR] listener failed: {}", err);
@@ -281,15 +319,17 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
 
 pub struct EventListener<T> {
     stream: Stream<T>,
-    events: Arc<Mutex<Vec<EventKind>>>,
+    events: Arc<Mutex<Vec<Event>>>,
+    replies: Arc<Mutex<Vec<Reply>>>,
     sequence: SequenceManager,
 }
 
 impl<T> EventListener<T> where T: Send + Sync + Read + Write + TryClone {
-    pub fn new(stream: Stream<T>, events: Arc<Mutex<Vec<EventKind>>>, sequence: SequenceManager) -> EventListener<T> {
+    pub fn new(stream: Stream<T>, events: Arc<Mutex<Vec<Event>>>, replies: Arc<Mutex<Vec<Reply>>>, sequence: SequenceManager) -> EventListener<T> {
         EventListener {
             stream,
             events,
+            replies,
             sequence,
         }
     }
@@ -299,6 +339,11 @@ impl<T> EventListener<T> where T: Send + Sync + Read + Write + TryClone {
 
         match sequence.kind {
             ReplyKind::InternAtom => {
+                let response: InternAtomResponse = self.stream.recv_decode()?;
+
+                lock!(self.replies)?.push(Reply::InternAtom {
+                    atom: response.atom,
+                });
             },
         }
 

@@ -243,7 +243,7 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
 
         self.stream.inner.write_all(request::encode(&generic_window))?;
 
-        self.sequence.next(None)?;
+        self.sequence.skip();
 
         Ok(())
     }
@@ -277,7 +277,7 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
 
         self.stream.inner.write_all(&window_values_request)?;
 
-        self.sequence.next(None)?;
+        self.sequence.skip();
 
         Ok(Window::new(self.stream.try_clone()?, self.sequence.clone(), window.visual, window_request.depth, window_request.wid))
     }

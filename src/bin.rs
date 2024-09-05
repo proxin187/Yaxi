@@ -1,10 +1,18 @@
 use xrs::display::window::{WindowArguments, WindowValuesBuilder, WindowClass, WindowKind, VisualClass};
+use xrs::display::proto::ReplyKind;
 use xrs::display;
 
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let display = display::open_unix(0)?;
+    let mut display = display::open_unix(0)?;
 
+    display.intern_atom("WM_CLASS", true)?;
+
+    let reply = display.wait_for_reply()?;
+
+    println!("reply: {:?}", reply);
+
+    /*
     let mut root = display.default_root_window()?;
 
     println!("root_depth: {}", root.depth());
@@ -27,6 +35,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     for _ in 0..99999999u64 {}
 
     window.destroy(WindowKind::Window)?;
+    */
 
     Ok(())
 }

@@ -188,6 +188,14 @@ pub struct InternAtom {
 
 #[repr(packed, C)]
 #[derive(Debug)]
+pub struct InternAtomResponse {
+    pub length: u32,
+    pub atom: u32,
+    pub pad0: [u8; 20],
+}
+
+#[repr(packed, C)]
+#[derive(Debug)]
 pub struct GrabKey {
     major_opcode: u8,
     owner_events: u8,
