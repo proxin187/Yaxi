@@ -6,7 +6,7 @@
     <br>
 </h1>
 
-<h4 align="center">A minimal library for interacting with x11 written in rust.</h4>
+<h4 align="center">xrs is a homemade x11 library written from scratch</h4>
 
 ## Roadmap
 
@@ -14,5 +14,11 @@
 - [X] Authorization
 - [X] Requests and Replies
 - [ ] Window Manager in xrs
+
+## Key Features
+
+* Clean Interface - XRS provides a clean interface, making it perfect for both beginners and experienced developers
+* Safety - XRS has safe interface for x11 unlike many other x11 libraries
+* Not A Wrapper - XRS is a pure rust implementation and is NOT a wrapper
 
 

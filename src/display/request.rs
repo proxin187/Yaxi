@@ -196,6 +196,55 @@ pub struct InternAtomResponse {
 
 #[repr(packed, C)]
 #[derive(Debug)]
+pub struct ChangeProperty {
+    pub opcode: u8,
+    pub mode: u8,
+    pub length: u16,
+    pub window: u32,
+    pub property: u32,
+    pub type_: u32,
+    pub format: u8,
+    pub pad0: [u8; 3],
+    pub data_len: u32,
+}
+
+#[repr(packed, C)]
+#[derive(Debug)]
+pub struct GetProperty {
+    pub opcode: u8,
+    pub delete: u8,
+    pub length: u16,
+    pub window: u32,
+    pub property: u32,
+    pub type_: u32,
+    pub long_offset: u32,
+    pub long_length: u32,
+}
+
+#[repr(packed, C)]
+#[derive(Debug)]
+pub struct GetPropertyResponse {
+    pub length: u32,
+    pub type_: u32,
+    pub bytes_after: u32,
+    pub value_len: u32,
+    pub pad0: [u8; 12],
+}
+
+#[repr(packed, C)]
+#[derive(Debug)]
+pub struct ReparentWindow {
+    pub opcode: u8,
+    pub pad0: u8,
+    pub length: u32,
+    pub window: u32,
+    pub parent: u32,
+    pub x: u16,
+    pub y: u16,
+}
+
+#[repr(packed, C)]
+#[derive(Debug)]
 pub struct GrabKey {
     major_opcode: u8,
     owner_events: u8,
@@ -230,8 +279,8 @@ pub fn decode_slice<'a, T>(bytes: &'a [u8], length: usize) -> &'a [T] {
     }
 }
 
-pub fn pad(len: usize) -> Vec<u8> {
-    vec![0; (4 - (len % 4)) % 4]
+pub fn pad(len: usize) -> usize {
+    (4 - (len % 4)) % 4
 }
 
 

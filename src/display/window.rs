@@ -214,6 +214,29 @@ impl WindowKind {
     }
 }
 
+#[derive(Clone, Copy)]
+pub enum PropFormat {
+    Format8 = 8,
+    Format16 = 16,
+    Format32 = 32,
+}
+
+impl PropFormat {
+    pub fn encode(&self, len: usize) -> u32 {
+        match self {
+            PropFormat::Format8 => len as u32,
+            PropFormat::Format16 => len as u32 / 2,
+            PropFormat::Format32 => len as u32 / 4,
+        }
+    }
+}
+
+pub enum PropMode {
+    Replace = 0,
+    Prepend = 1,
+    Append = 2,
+}
+
 pub struct Window<T> {
     stream: Stream<T>,
     sequence: SequenceManager,
@@ -234,14 +257,12 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
     }
 
     fn generic_window(&mut self, opcode: u8, length: u16) -> Result<(), Box<dyn std::error::Error>> {
-        let generic_window = GenericWindow {
+        self.stream.send_encode(GenericWindow {
             opcode,
             pad0: 0,
             length,
             wid: self.id(),
-        };
-
-        self.stream.inner.write_all(request::encode(&generic_window))?;
+        })?;
 
         self.sequence.skip();
 
@@ -256,12 +277,13 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
 
     pub fn create_window(&mut self, mut window: WindowArguments) -> Result<Window<T>, Box<dyn std::error::Error>> {
         let window_values_request = window.values.build()?;
+        let wid = xid::next()?;
 
-        let window_request = CreateWindow {
+        self.stream.send_encode(CreateWindow {
             opcode: Opcode::CREATE_WINDOW,
             depth: window.depth,
             length: 8 + window.values.len(),
-            wid: xid::next()?,
+            wid,
             parent: self.id(),
             x: window.x,
             y: window.y,
@@ -271,15 +293,27 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
             class: window.class as u16,
             visual: window.visual.id,
             value_mask: window.values.value_mask,
-        };
-
-        self.stream.inner.write_all(request::encode(&window_request))?;
+        })?;
 
         self.stream.inner.write_all(&window_values_request)?;
 
         self.sequence.skip();
 
-        Ok(Window::new(self.stream.try_clone()?, self.sequence.clone(), window.visual, window_request.depth, window_request.wid))
+        Ok(Window::new(self.stream.try_clone()?, self.sequence.clone(), window.visual, window.depth, wid))
+    }
+
+    pub fn reparent(&mut self, parent: Window<T>, x: u16, y: u16) -> Result<(), Box<dyn std::error::Error>> {
+        self.sequence.skip();
+
+        self.stream.send_encode(ReparentWindow {
+            opcode: Opcode::REPARENT_WINDOW,
+            pad0: 0,
+            length: 4,
+            window: self.id(),
+            parent: parent.id(),
+            x,
+            y,
+        })
     }
 
     pub fn destroy(&mut self, kind: WindowKind) -> Result<(), Box<dyn std::error::Error>> {
@@ -292,6 +326,65 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
 
     pub fn unmap(&mut self, kind: WindowKind) -> Result<(), Box<dyn std::error::Error>> {
         self.generic_window(kind.encode(Opcode::UNMAP_SUBWINDOWS, Opcode::UNMAP_WINDOW), 2)
+    }
+
+    pub fn change_property(
+        &mut self,
+        property: Atom,
+        type_: Atom,
+        format: PropFormat,
+        mode: PropMode,
+        data: &[u8]
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let request = ChangeProperty {
+            opcode: Opcode::CHANGE_PROPERTY,
+            mode: mode as u8,
+            length: 6 + (data.len() as u16 + request::pad(data.len()) as u16) / 4,
+            window: self.id(),
+            property: property.id(),
+            type_: type_.id(),
+            format: format as u8,
+            pad0: [0; 3],
+            data_len: format.encode(data.len()),
+        };
+
+        self.stream.send(request::encode(&request))?;
+
+        self.stream.send_pad(data)?;
+
+        self.sequence.skip();
+
+        Ok(())
+    }
+
+    pub fn delete_property(&mut self, property: Atom) -> Result<(), Box<dyn std::error::Error>> {
+        self.generic_window(Opcode::DELETE_PROPERTY, 3)?;
+
+        self.stream.send_encode(property.id())?;
+
+        self.sequence.skip();
+
+        Ok(())
+    }
+
+    pub fn get_property(&mut self, property: Atom, type_: Atom, delete: bool) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+        self.stream.send_encode(GetProperty {
+            opcode: Opcode::GET_PROPERTY,
+            delete: delete.then(|| 1).unwrap_or(0),
+            length: 6,
+            window: self.id(),
+            property: property.id(),
+            type_: type_.id(),
+            long_offset: u32::MIN,
+            long_length: u16::MAX as u32,
+        })?;
+
+        self.sequence.append(ReplyKind::GetProperty)?;
+
+        match self.sequence.wait_for_reply()? {
+            Reply::GetProperty { value } => Ok(value),
+            _ => unreachable!(),
+        }
     }
 
     pub fn grab_key(&mut self) {

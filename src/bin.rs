@@ -1,18 +1,10 @@
-use xrs::display::window::{WindowArguments, WindowValuesBuilder, WindowClass, WindowKind, VisualClass};
-use xrs::display::proto::ReplyKind;
-use xrs::display;
+use xrs::display::window::{PropFormat, PropMode, WindowArguments, WindowValuesBuilder, WindowClass, WindowKind, VisualClass};
+use xrs::display::{self, Atom};
 
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut display = display::open_unix(0)?;
 
-    display.intern_atom("WM_CLASS", true)?;
-
-    let reply = display.wait_for_reply()?;
-
-    println!("reply: {:?}", reply);
-
-    /*
     let mut root = display.default_root_window()?;
 
     println!("root_depth: {}", root.depth());
@@ -30,6 +22,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         values: WindowValuesBuilder::new(&[]),
     })?;
 
+    let atom = display.intern_atom("TEST2", false)?;
+
+    println!("id: {:?}, name: {:?}", atom.id(), atom.name());
+
+    println!("property: {:?}", window.get_property(atom, Atom::CARDINAL, false)?);
+
+    window.change_property(atom, Atom::CARDINAL, PropFormat::Format8, PropMode::Replace, &[2])?;
+
+    println!("property: {:?}", window.get_property(atom, Atom::CARDINAL, false)?);
+
+    /*
     window.map(WindowKind::Window)?;
 
     for _ in 0..99999999u64 {}

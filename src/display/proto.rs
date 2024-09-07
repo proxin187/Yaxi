@@ -27,11 +27,15 @@ impl Opcode {
     pub const CREATE_WINDOW: u8 = 1;
     pub const DESTROY_WINDOW: u8 = 4;
     pub const DESTROY_SUBWINDOWS: u8 = 5;
+    pub const REPARENT_WINDOW: u8 = 7;
     pub const MAP_WINDOW: u8 = 8;
     pub const MAP_SUBWINDOWS: u8 = 9;
     pub const UNMAP_WINDOW: u8 = 10;
     pub const UNMAP_SUBWINDOWS: u8 = 11;
     pub const INTERN_ATOM: u8 = 16;
+    pub const CHANGE_PROPERTY: u8 = 18;
+    pub const DELETE_PROPERTY: u8 = 19;
+    pub const GET_PROPERTY: u8 = 20;
 }
 
 #[non_exhaustive]
@@ -58,8 +62,19 @@ impl ErrorCode {
 }
 
 #[derive(Debug)]
+pub enum Reply {
+    InternAtom {
+        atom: u32
+    },
+    GetProperty {
+        value: Vec<u8>,
+    },
+}
+
+#[derive(Debug)]
 pub enum ReplyKind {
     InternAtom,
+    GetProperty,
 }
 
 #[derive(Debug)]
@@ -81,6 +96,7 @@ impl Sequence {
 pub struct SequenceManager {
     id: Arc<AtomicU16>,
     sequences: Arc<Mutex<Vec<Sequence>>>,
+    replies: Arc<Mutex<Vec<Reply>>>,
 }
 
 impl SequenceManager {
@@ -88,13 +104,25 @@ impl SequenceManager {
         SequenceManager {
             id: Arc::new(AtomicU16::default()),
             sequences: Arc::new(Mutex::new(Vec::new())),
+            replies: Arc::new(Mutex::new(Vec::new())),
         }
+    }
+    pub fn poll_reply(&mut self) -> Result<bool, Box<dyn std::error::Error>> {
+        Ok(!lock!(self.replies)?.is_empty())
+    }
+
+    pub fn wait_for_reply(&mut self) -> Result<Reply, Box<dyn std::error::Error>> {
+        while !self.poll_reply()? {}
+
+        lock!(self.replies)?.pop().ok_or(Box::new(Error::NoReply))
+    }
+
+    pub fn push_reply(&mut self, reply: Reply) -> Result<(), Box<dyn std::error::Error>> {
+        lock!(self.replies).map(|mut lock| lock.push(reply))
     }
 
     pub fn get(&mut self, id: u16) -> Result<Sequence, Box<dyn std::error::Error>> {
         let mut lock = lock!(self.sequences)?;
-
-        println!("[get] sequences={:?}, id={}", lock, id);
 
         match lock.iter().position(|sequence| sequence.id == id) {
             Some(index) => Ok(lock.remove(index)),
@@ -118,13 +146,6 @@ impl SequenceManager {
 #[derive(Debug)]
 pub enum Event {
     KeyEvent {
-    },
-}
-
-#[derive(Debug)]
-pub enum Reply {
-    InternAtom {
-        atom: u32
     },
 }
 

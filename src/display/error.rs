@@ -3,10 +3,11 @@
 pub enum Error {
     InvalidOpcode,
     InvalidStatus,
+    InvalidId,
+    InvalidAtom,
     Authenthicate,
     RanOutOfXid,
     NoScreens,
-    InvalidId,
     NoReply,
     SetupFailed {
         reason: String,
@@ -32,6 +33,12 @@ impl std::fmt::Display for Error {
             Error::InvalidStatus => {
                 f.write_str("server responded with invalid status code")
             },
+            Error::InvalidId => {
+                f.write_str("invalid id")
+            },
+            Error::InvalidAtom => {
+                f.write_str("invalid atom")
+            },
             Error::Authenthicate => {
                 f.write_str("authenthication required")
             },
@@ -40,9 +47,6 @@ impl std::fmt::Display for Error {
             },
             Error::NoScreens => {
                 f.write_str("server never informed of any screens")
-            },
-            Error::InvalidId => {
-                f.write_str("invalid id")
             },
             Error::NoReply => {
                 f.write_str("reply queue empty")

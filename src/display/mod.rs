@@ -17,12 +17,6 @@ use std::sync::{Arc, Mutex};
 use std::fs::File;
 use std::thread;
 
-macro_rules! lock {
-    ($mutex:expr) => {
-        $mutex.lock().map_err(|_| Into::<Box<dyn std::error::Error>>::into("failed to lock mutex"))
-    }
-}
-
 // https://www.x.org/docs/XProtocol/proto.pdf
 
 const X_TCP_PORT: u16 = 6000;
@@ -89,9 +83,13 @@ impl<T> Stream<T> where T: Send + Sync + Read + Write + TryClone {
     fn send_pad(&mut self, request: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
         self.send(request)?;
 
-        self.send(&request::pad(request.len()))?;
+        self.send(&vec![0u8; request::pad(request.len())])?;
 
         Ok(())
+    }
+
+    fn send_encode<E>(&mut self, object: E) -> Result<(), Box<dyn std::error::Error>> {
+        self.send(request::encode(&object))
     }
 
     fn recv(&mut self, size: usize) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
@@ -118,8 +116,25 @@ impl<T> Stream<T> where T: Send + Sync + Read + Write + TryClone {
     }
 }
 
-pub struct Atom {
+#[derive(Debug, Clone, Copy)]
+pub struct Atom<'a> {
     id: u32,
+    name: &'a str,
+}
+
+impl<'a> Atom<'a> {
+    pub const CARDINAL: Atom<'static> = Atom::new(6, "CARDINAL");
+
+    pub const fn new(id: u32, name: &'a str) -> Atom {
+        Atom {
+            id,
+            name,
+        }
+    }
+
+    pub fn name(&self) -> &'a str { self.name }
+
+    pub fn id(&self) -> u32 { self.id }
 }
 
 #[derive(Debug, Clone)]
@@ -174,7 +189,6 @@ impl Screen {
 pub struct Display<T> {
     stream: Stream<T>,
     events: Arc<Mutex<Vec<Event>>>,
-    replies: Arc<Mutex<Vec<Reply>>>,
     roots: Vec<Screen>,
     sequence: SequenceManager,
 }
@@ -184,7 +198,6 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
         let mut display = Display {
             stream: Stream::new(inner),
             events: Arc::new(Mutex::new(Vec::new())),
-            replies: Arc::new(Mutex::new(Vec::new())),
             roots: Vec::new(),
             sequence: SequenceManager::new(),
         };
@@ -192,16 +205,6 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
         display.setup()?;
 
         Ok(display)
-    }
-
-    pub fn poll_reply(&mut self) -> Result<bool, Box<dyn std::error::Error>> {
-        Ok(!lock!(self.replies)?.is_empty())
-    }
-
-    pub fn wait_for_reply(&mut self) -> Result<Reply, Box<dyn std::error::Error>> {
-        while !self.poll_reply()? {}
-
-        lock!(self.replies)?.pop().ok_or(Box::new(Error::NoReply))
     }
 
     pub fn default_root_window(&self) -> Result<Window<T>, Box<dyn std::error::Error>> {
@@ -224,11 +227,11 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
         Err(Box::new(Error::InvalidId))
     }
 
-    pub fn intern_atom(&mut self, name: &str, only_if_exists: bool) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn intern_atom<'a>(&mut self, name: &'a str, only_if_exists: bool) -> Result<Atom<'a>, Box<dyn std::error::Error>> {
         let request = InternAtom {
             opcode: Opcode::INTERN_ATOM,
             only_if_exists: only_if_exists.then(|| 1).unwrap_or(0),
-            length: 2 + (name.len() as u16 + request::pad(name.len()).len() as u16) / 4,
+            length: 2 + (name.len() as u16 + request::pad(name.len()) as u16) / 4,
             name_len: name.len() as u16,
             pad1: [0u8; 2],
         };
@@ -239,7 +242,13 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
 
         self.sequence.append(ReplyKind::InternAtom)?;
 
-        Ok(())
+        match self.sequence.wait_for_reply()? {
+            Reply::InternAtom { atom } => match atom {
+                u32::MIN => Err(Box::new(Error::InvalidAtom)),
+                _ => Ok(Atom::new(atom, name)),
+            },
+            _ => unreachable!(),
+        }
     }
 
     fn endian(&self) -> u8 {
@@ -281,11 +290,10 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
 
         let stream = self.stream.try_clone()?;
         let events = self.events.clone();
-        let replies = self.replies.clone();
         let sequence = self.sequence.clone();
 
         thread::spawn(move || {
-            let mut listener = EventListener::new(stream, events, replies, sequence);
+            let mut listener = EventListener::new(stream, events, sequence);
 
             if let Err(err) = listener.listen() {
                 println!("[ERROR] listener failed: {}", err);
@@ -304,7 +312,7 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
 
         self.stream.send(request::encode(&request))?;
 
-        self.stream.send_arr(&[entry.name.clone(), request::pad(entry.name.len()), entry.data.clone(), request::pad(entry.data.len())])?;
+        self.stream.send_arr(&[entry.name.clone(), vec![0u8; request::pad(entry.name.len())], entry.data.clone(), vec![0u8; request::pad(entry.data.len())]])?;
 
         let response: SetupResponse = self.stream.recv_decode()?;
 
@@ -320,16 +328,14 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
 pub struct EventListener<T> {
     stream: Stream<T>,
     events: Arc<Mutex<Vec<Event>>>,
-    replies: Arc<Mutex<Vec<Reply>>>,
     sequence: SequenceManager,
 }
 
 impl<T> EventListener<T> where T: Send + Sync + Read + Write + TryClone {
-    pub fn new(stream: Stream<T>, events: Arc<Mutex<Vec<Event>>>, replies: Arc<Mutex<Vec<Reply>>>, sequence: SequenceManager) -> EventListener<T> {
+    pub fn new(stream: Stream<T>, events: Arc<Mutex<Vec<Event>>>, sequence: SequenceManager) -> EventListener<T> {
         EventListener {
             stream,
             events,
-            replies,
             sequence,
         }
     }
@@ -341,9 +347,18 @@ impl<T> EventListener<T> where T: Send + Sync + Read + Write + TryClone {
             ReplyKind::InternAtom => {
                 let response: InternAtomResponse = self.stream.recv_decode()?;
 
-                lock!(self.replies)?.push(Reply::InternAtom {
+                self.sequence.push_reply(Reply::InternAtom {
                     atom: response.atom,
-                });
+                })?;
+            },
+            ReplyKind::GetProperty => {
+                let response: GetPropertyResponse = self.stream.recv_decode()?;
+
+                self.sequence.push_reply(Reply::GetProperty {
+                    value: self.stream.recv(response.value_len as usize)?,
+                })?;
+
+                self.stream.recv(request::pad(response.value_len as usize))?;
             },
         }
 
