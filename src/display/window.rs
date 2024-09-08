@@ -256,6 +256,10 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
         }
     }
 
+    // TODO: finish this
+    fn from_id(stream: Stream<T>, sequence: SequenceManager, id: u32) {
+    }
+
     fn generic_window(&mut self, opcode: u8, length: u16) -> Result<(), Box<dyn std::error::Error>> {
         self.stream.send_encode(GenericWindow {
             opcode,

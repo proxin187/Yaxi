@@ -25,6 +25,7 @@ pub struct Opcode;
 
 impl Opcode {
     pub const CREATE_WINDOW: u8 = 1;
+    pub const GET_WINDOW_ATTRIBUTES: u8 = 3;
     pub const DESTROY_WINDOW: u8 = 4;
     pub const DESTROY_SUBWINDOWS: u8 = 5;
     pub const REPARENT_WINDOW: u8 = 7;
@@ -144,8 +145,24 @@ impl SequenceManager {
 }
 
 #[derive(Debug)]
+pub enum KeyEventKind {
+    Press,
+    Release,
+}
+
+#[derive(Debug)]
+pub struct Coordinates {
+    x: usize,
+    y: usize,
+    root_x: usize,
+    root_y: usize,
+}
+
+#[derive(Debug)]
 pub enum Event {
     KeyEvent {
+        kind: KeyEventKind,
+        coordinates: Coordinates,
     },
 }
 
