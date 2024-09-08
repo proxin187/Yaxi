@@ -1,7 +1,8 @@
-use super::Error;
+use super::{Window, Error, TryClone};
 
 use std::sync::atomic::{Ordering, AtomicU16};
 use std::sync::{Arc, Mutex};
+use std::io::{Read, Write};
 
 macro_rules! lock {
     ($mutex:expr) => {
@@ -62,7 +63,7 @@ impl ErrorCode {
     pub const IMPLEMENTATION: u8 = 17;
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Reply {
     InternAtom {
         atom: u32
@@ -70,12 +71,16 @@ pub enum Reply {
     GetProperty {
         value: Vec<u8>,
     },
+    GetWindowAttributes {
+        // TODO: add arguments here
+    },
 }
 
 #[derive(Debug)]
 pub enum ReplyKind {
     InternAtom,
     GetProperty,
+    GetWindowAttributes,
 }
 
 #[derive(Debug)]
@@ -93,11 +98,42 @@ impl Sequence {
     }
 }
 
+pub struct Queue<T> {
+    queue: Arc<Mutex<Vec<T>>>,
+}
+
+impl<T> Queue<T> {
+    pub fn new() -> Queue<T> {
+        Queue {
+            queue: Arc::new(Mutex::new(Vec::new())),
+        }
+    }
+
+    pub fn clone(&self) -> Queue<T> {
+        Queue {
+            queue: self.queue.clone(),
+        }
+    }
+
+    pub fn poll(&mut self) -> Result<bool, Box<dyn std::error::Error>> {
+        Ok(!lock!(self.queue)?.is_empty())
+    }
+
+    pub fn wait(&mut self) -> Result<T, Box<dyn std::error::Error>> {
+        while !self.poll()? {}
+
+        lock!(self.queue)?.pop().ok_or(Box::new(Error::NoReply))
+    }
+
+    pub fn push(&mut self, element: T) -> Result<(), Box<dyn std::error::Error>> {
+        lock!(self.queue).map(|mut lock| lock.push(element))
+    }
+}
+
 #[derive(Clone)]
 pub struct SequenceManager {
     id: Arc<AtomicU16>,
     sequences: Arc<Mutex<Vec<Sequence>>>,
-    replies: Arc<Mutex<Vec<Reply>>>,
 }
 
 impl SequenceManager {
@@ -105,21 +141,7 @@ impl SequenceManager {
         SequenceManager {
             id: Arc::new(AtomicU16::default()),
             sequences: Arc::new(Mutex::new(Vec::new())),
-            replies: Arc::new(Mutex::new(Vec::new())),
         }
-    }
-    pub fn poll_reply(&mut self) -> Result<bool, Box<dyn std::error::Error>> {
-        Ok(!lock!(self.replies)?.is_empty())
-    }
-
-    pub fn wait_for_reply(&mut self) -> Result<Reply, Box<dyn std::error::Error>> {
-        while !self.poll_reply()? {}
-
-        lock!(self.replies)?.pop().ok_or(Box::new(Error::NoReply))
-    }
-
-    pub fn push_reply(&mut self, reply: Reply) -> Result<(), Box<dyn std::error::Error>> {
-        lock!(self.replies).map(|mut lock| lock.push(reply))
     }
 
     pub fn get(&mut self, id: u16) -> Result<Sequence, Box<dyn std::error::Error>> {
@@ -144,25 +166,40 @@ impl SequenceManager {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum KeyEventKind {
     Press,
     Release,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Coordinates {
-    x: usize,
-    y: usize,
-    root_x: usize,
-    root_y: usize,
+    x: u16,
+    y: u16,
+    root_x: u16,
+    root_y: u16,
 }
 
-#[derive(Debug)]
-pub enum Event {
+impl Coordinates {
+    pub fn new(x: u16, y: u16, root_x: u16, root_y: u16) -> Coordinates {
+        Coordinates {
+            x,
+            y,
+            root_x,
+            root_y,
+        }
+    }
+}
+
+pub enum Event<T: Send + Sync + Read + Write + TryClone> {
     KeyEvent {
         kind: KeyEventKind,
         coordinates: Coordinates,
+        window: Window<T>,
+        root: Window<T>,
+        subwindow: Window<T>,
+        state: u16,
+        send_event: bool,
     },
 }
 

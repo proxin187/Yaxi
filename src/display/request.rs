@@ -245,6 +245,15 @@ pub struct ReparentWindow {
 
 #[repr(packed, C)]
 #[derive(Debug)]
+pub struct GetWindowAttributes {
+    pub opcode: u8,
+    pub pad0: u8,
+    pub length: u16,
+    pub wid: u32,
+}
+
+#[repr(packed, C)]
+#[derive(Debug)]
 pub struct GrabKey {
     major_opcode: u8,
     owner_events: u8,

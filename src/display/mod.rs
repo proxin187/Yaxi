@@ -55,6 +55,12 @@ pub struct Stream<T> {
     inner: Box<T>,
 }
 
+impl<T> Clone for Stream<T> where T: Send + Sync + Read + Write + TryClone {
+    fn clone(&self) -> Stream<T> {
+        self.try_clone().expect("failed to clone")
+    }
+}
+
 impl<T> Stream<T> where T: Send + Sync + Read + Write + TryClone {
     pub fn new(inner: T) -> Stream<T> {
         Stream {
@@ -186,9 +192,10 @@ impl Screen {
     }
 }
 
-pub struct Display<T> {
+pub struct Display<T> where T: Send + Sync + Read + Write + TryClone {
     stream: Stream<T>,
-    events: Arc<Mutex<Vec<Event>>>,
+    events: Queue<Event<T>>,
+    replies: Queue<Reply>,
     roots: Vec<Screen>,
     sequence: SequenceManager,
 }
@@ -197,7 +204,8 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
     pub fn connect<'a>(inner: T) -> Result<Display<T>, Box<dyn std::error::Error>> {
         let mut display = Display {
             stream: Stream::new(inner),
-            events: Arc::new(Mutex::new(Vec::new())),
+            events: Queue::new(),
+            replies: Queue::new(),
             roots: Vec::new(),
             sequence: SequenceManager::new(),
         };
@@ -211,7 +219,7 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
         let stream = self.stream.try_clone()?;
         let screen = self.roots.first().ok_or(Error::NoScreens)?;
 
-        Ok(Window::<T>::new(stream, self.sequence.clone(), self.visual_from_id(screen.response.root_visual)?, screen.response.root_depth, screen.response.root))
+        Ok(Window::<T>::new(stream, self.replies.clone(), self.sequence.clone(), self.visual_from_id(screen.response.root_visual)?, screen.response.root_depth, screen.response.root))
     }
 
     pub fn visual_from_id(&self, id: u32) -> Result<Visual, Box<dyn std::error::Error>> {
@@ -242,7 +250,7 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
 
         self.sequence.append(ReplyKind::InternAtom)?;
 
-        match self.sequence.wait_for_reply()? {
+        match self.replies.wait()? {
             Reply::InternAtom { atom } => match atom {
                 u32::MIN => Err(Box::new(Error::InvalidAtom)),
                 _ => Ok(Atom::new(atom, name)),
@@ -290,10 +298,11 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
 
         let stream = self.stream.try_clone()?;
         let events = self.events.clone();
+        let replies = self.replies.clone();
         let sequence = self.sequence.clone();
 
         thread::spawn(move || {
-            let mut listener = EventListener::new(stream, events, sequence);
+            let mut listener = EventListener::new(stream, events, replies, sequence);
 
             if let Err(err) = listener.listen() {
                 println!("[ERROR] listener failed: {}", err);
@@ -325,17 +334,19 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
     }
 }
 
-pub struct EventListener<T> {
+pub struct EventListener<T: Send + Sync + Read + Write + TryClone> {
     stream: Stream<T>,
-    events: Arc<Mutex<Vec<Event>>>,
+    events: Queue<Event<T>>,
+    replies: Queue<Reply>,
     sequence: SequenceManager,
 }
 
 impl<T> EventListener<T> where T: Send + Sync + Read + Write + TryClone {
-    pub fn new(stream: Stream<T>, events: Arc<Mutex<Vec<Event>>>, sequence: SequenceManager) -> EventListener<T> {
+    pub fn new(stream: Stream<T>, events: Queue<Event<T>>, replies: Queue<Reply>, sequence: SequenceManager) -> EventListener<T> {
         EventListener {
             stream,
             events,
+            replies,
             sequence,
         }
     }
@@ -347,14 +358,14 @@ impl<T> EventListener<T> where T: Send + Sync + Read + Write + TryClone {
             ReplyKind::InternAtom => {
                 let response: InternAtomResponse = self.stream.recv_decode()?;
 
-                self.sequence.push_reply(Reply::InternAtom {
+                self.replies.push(Reply::InternAtom {
                     atom: response.atom,
                 })?;
             },
             ReplyKind::GetProperty => {
                 let response: GetPropertyResponse = self.stream.recv_decode()?;
 
-                self.sequence.push_reply(Reply::GetProperty {
+                self.replies.push(Reply::GetProperty {
                     value: self.stream.recv(response.value_len as usize)?,
                 })?;
 
@@ -385,7 +396,13 @@ impl<T> EventListener<T> where T: Send + Sync + Read + Write + TryClone {
             Response::KEY_PRESS | Response::KEY_RELEASE => {
                 let event: KeyEvent = self.stream.recv_decode()?;
 
-                println!("event: {:?}", event);
+                /*
+                self.events.push(Event::KeyEvent {
+                    kind: KeyEventKind::Press,
+                    coordinates: Coordinates::new(event.event_x, event.event_y, event.root_x, event.root_y),
+                    root: Window::
+                })?;
+                */
 
                 Ok(())
             },

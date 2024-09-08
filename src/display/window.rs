@@ -239,6 +239,7 @@ pub enum PropMode {
 
 pub struct Window<T> {
     stream: Stream<T>,
+    replies: Queue<Reply>,
     sequence: SequenceManager,
     visual: Visual,
     depth: u8,
@@ -246,9 +247,10 @@ pub struct Window<T> {
 }
 
 impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
-    pub fn new(stream: Stream<T>, sequence: SequenceManager, visual: Visual, depth: u8, id: u32) -> Window<T> {
+    pub fn new(stream: Stream<T>, replies: Queue<Reply>, sequence: SequenceManager, visual: Visual, depth: u8, id: u32) -> Window<T> {
         Window {
             stream,
+            replies,
             sequence,
             visual,
             depth,
@@ -257,7 +259,17 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
     }
 
     // TODO: finish this
-    fn from_id(stream: Stream<T>, sequence: SequenceManager, id: u32) {
+    pub fn from_id(stream: Stream<T>, sequence: SequenceManager, id: u32) -> Result<Window<T>, Box<dyn std::error::Error>> {
+        stream.send_encode(GetWindowAttributes {
+            opcode: Opcode::GET_WINDOW_ATTRIBUTES,
+            pad0: 0,
+            length: 2,
+            wid: id,
+        })?;
+
+        sequence.append(ReplyKind::GetWindowAttributes);
+
+        Ok(())
     }
 
     fn generic_window(&mut self, opcode: u8, length: u16) -> Result<(), Box<dyn std::error::Error>> {
@@ -303,7 +315,7 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
 
         self.sequence.skip();
 
-        Ok(Window::new(self.stream.try_clone()?, self.sequence.clone(), window.visual, window.depth, wid))
+        Ok(Window::new(self.stream.try_clone()?, self.replies.clone(), self.sequence.clone(), window.visual, window.depth, wid))
     }
 
     pub fn reparent(&mut self, parent: Window<T>, x: u16, y: u16) -> Result<(), Box<dyn std::error::Error>> {
@@ -385,7 +397,7 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
 
         self.sequence.append(ReplyKind::GetProperty)?;
 
-        match self.sequence.wait_for_reply()? {
+        match self.replies.wait()? {
             Reply::GetProperty { value } => Ok(value),
             _ => unreachable!(),
         }
