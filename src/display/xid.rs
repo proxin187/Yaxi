@@ -1,5 +1,7 @@
 use super::*;
 
+use std::sync::Mutex;
+
 static XID: Mutex<Xid> = Mutex::new(Xid::new());
 
 macro_rules! lock {

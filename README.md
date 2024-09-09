@@ -8,6 +8,9 @@
 
 <h4 align="center">xrs is a homemade x11 library written from scratch</h4>
 
+> [!WARNING]
+> xrs is a work-in-progress library and is not ready for real world usage, yet...
+
 ## Roadmap
 
 - [X] Connection Setup

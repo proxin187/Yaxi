@@ -1,4 +1,4 @@
-use super::{Window, Error, TryClone};
+use super::{Window, WindowClass, Visual, Error, TryClone};
 
 use std::sync::atomic::{Ordering, AtomicU16};
 use std::sync::{Arc, Mutex};
@@ -26,6 +26,7 @@ pub struct Opcode;
 
 impl Opcode {
     pub const CREATE_WINDOW: u8 = 1;
+    pub const CHANGE_WINDOW_ATTRIBUTES: u8 = 2;
     pub const GET_WINDOW_ATTRIBUTES: u8 = 3;
     pub const DESTROY_WINDOW: u8 = 4;
     pub const DESTROY_SUBWINDOWS: u8 = 5;
@@ -72,7 +73,9 @@ pub enum Reply {
         value: Vec<u8>,
     },
     GetWindowAttributes {
-        // TODO: add arguments here
+        visual: Visual,
+        class: WindowClass,
+        depth: u8,
     },
 }
 

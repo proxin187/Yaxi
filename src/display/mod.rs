@@ -13,7 +13,6 @@ use window::*;
 use std::os::unix::net::UnixStream;
 use std::net::{SocketAddr, TcpStream};
 use std::io::{Read, Write};
-use std::sync::{Arc, Mutex};
 use std::fs::File;
 use std::thread;
 
@@ -158,6 +157,7 @@ impl Visual {
     }
 }
 
+#[derive(Clone)]
 pub struct Depth {
     depth: u8,
     length: u16,
@@ -178,6 +178,7 @@ impl Depth {
     }
 }
 
+#[derive(Clone)]
 pub struct Screen {
     response: ScreenResponse,
     depths: Vec<Depth>,
@@ -192,34 +193,20 @@ impl Screen {
     }
 }
 
-pub struct Display<T> where T: Send + Sync + Read + Write + TryClone {
-    stream: Stream<T>,
-    events: Queue<Event<T>>,
-    replies: Queue<Reply>,
+#[derive(Clone)]
+pub struct Roots {
     roots: Vec<Screen>,
-    sequence: SequenceManager,
 }
 
-impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
-    pub fn connect<'a>(inner: T) -> Result<Display<T>, Box<dyn std::error::Error>> {
-        let mut display = Display {
-            stream: Stream::new(inner),
-            events: Queue::new(),
-            replies: Queue::new(),
+impl Roots {
+    pub fn new() -> Roots {
+        Roots {
             roots: Vec::new(),
-            sequence: SequenceManager::new(),
-        };
-
-        display.setup()?;
-
-        Ok(display)
+        }
     }
 
-    pub fn default_root_window(&self) -> Result<Window<T>, Box<dyn std::error::Error>> {
-        let stream = self.stream.try_clone()?;
-        let screen = self.roots.first().ok_or(Error::NoScreens)?;
-
-        Ok(Window::<T>::new(stream, self.replies.clone(), self.sequence.clone(), self.visual_from_id(screen.response.root_visual)?, screen.response.root_depth, screen.response.root))
+    pub fn first(&self) -> Result<&Screen, Box<dyn std::error::Error>> {
+        self.roots.first().ok_or(Box::new(Error::NoScreens))
     }
 
     pub fn visual_from_id(&self, id: u32) -> Result<Visual, Box<dyn std::error::Error>> {
@@ -233,6 +220,49 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
         }
 
         Err(Box::new(Error::InvalidId))
+    }
+
+    pub fn push(&mut self, screen: Screen) {
+        self.roots.push(screen);
+    }
+}
+
+pub struct Display<T> where T: Send + Sync + Read + Write + TryClone {
+    stream: Stream<T>,
+    events: Queue<Event<T>>,
+    replies: Queue<Reply>,
+    roots: Roots,
+    sequence: SequenceManager,
+}
+
+impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
+    pub fn connect<'a>(inner: T) -> Result<Display<T>, Box<dyn std::error::Error>> {
+        let mut display = Display {
+            stream: Stream::new(inner),
+            events: Queue::new(),
+            replies: Queue::new(),
+            roots: Roots::new(),
+            sequence: SequenceManager::new(),
+        };
+
+        display.setup()?;
+
+        Ok(display)
+    }
+
+    pub fn next_event(&mut self) -> Result<Event<T>, Box<dyn std::error::Error>> {
+        self.events.wait()
+    }
+
+    pub fn poll_event(&mut self) -> Result<bool, Box<dyn std::error::Error>> {
+        self.events.poll()
+    }
+
+    pub fn default_root_window(&self) -> Result<Window<T>, Box<dyn std::error::Error>> {
+        let stream = self.stream.try_clone()?;
+        let screen = self.roots.first()?;
+
+        Ok(Window::<T>::new(stream, self.replies.clone(), self.sequence.clone(), self.roots.visual_from_id(screen.response.root_visual)?, screen.response.root_depth, screen.response.root))
     }
 
     pub fn intern_atom<'a>(&mut self, name: &'a str, only_if_exists: bool) -> Result<Atom<'a>, Box<dyn std::error::Error>> {
@@ -300,9 +330,10 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
         let events = self.events.clone();
         let replies = self.replies.clone();
         let sequence = self.sequence.clone();
+        let roots = self.roots.clone();
 
         thread::spawn(move || {
-            let mut listener = EventListener::new(stream, events, replies, sequence);
+            let mut listener = EventListener::new(stream, events, replies, sequence, roots);
 
             if let Err(err) = listener.listen() {
                 println!("[ERROR] listener failed: {}", err);
@@ -339,15 +370,17 @@ pub struct EventListener<T: Send + Sync + Read + Write + TryClone> {
     events: Queue<Event<T>>,
     replies: Queue<Reply>,
     sequence: SequenceManager,
+    roots: Roots,
 }
 
 impl<T> EventListener<T> where T: Send + Sync + Read + Write + TryClone {
-    pub fn new(stream: Stream<T>, events: Queue<Event<T>>, replies: Queue<Reply>, sequence: SequenceManager) -> EventListener<T> {
+    pub fn new(stream: Stream<T>, events: Queue<Event<T>>, replies: Queue<Reply>, sequence: SequenceManager, roots: Roots) -> EventListener<T> {
         EventListener {
             stream,
             events,
             replies,
             sequence,
+            roots,
         }
     }
 
@@ -370,6 +403,16 @@ impl<T> EventListener<T> where T: Send + Sync + Read + Write + TryClone {
                 })?;
 
                 self.stream.recv(request::pad(response.value_len as usize))?;
+            },
+            ReplyKind::GetWindowAttributes => {
+                let response: GetWindowAttributesResponse = self.stream.recv_decode()?;
+                let screen = self.roots.first()?;
+
+                self.replies.push(Reply::GetWindowAttributes {
+                    visual: self.roots.visual_from_id(response.visual)?,
+                    class: WindowClass::from(response.class),
+                    depth: screen.response.root_depth,
+                })?;
             },
         }
 
@@ -396,13 +439,15 @@ impl<T> EventListener<T> where T: Send + Sync + Read + Write + TryClone {
             Response::KEY_PRESS | Response::KEY_RELEASE => {
                 let event: KeyEvent = self.stream.recv_decode()?;
 
-                /*
-                self.events.push(Event::KeyEvent {
+                self.events.push(Event::KeyEvent {
                     kind: KeyEventKind::Press,
                     coordinates: Coordinates::new(event.event_x, event.event_y, event.root_x, event.root_y),
-                    root: Window::
+                    window: Window::from_id(self.stream.clone(), self.replies.clone(), self.sequence.clone(), event.event)?,
+                    root: Window::from_id(self.stream.clone(), self.replies.clone(), self.sequence.clone(), event.root)?,
+                    subwindow: Window::from_id(self.stream.clone(), self.replies.clone(), self.sequence.clone(), event.child)?,
+                    state: event.state,
+                    send_event: event.same_screen != 0,
                 })?;
-                */
 
                 Ok(())
             },

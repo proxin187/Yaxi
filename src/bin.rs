@@ -1,4 +1,4 @@
-use xrs::display::window::{PropFormat, PropMode, WindowArguments, WindowValuesBuilder, WindowClass, WindowKind, VisualClass};
+use xrs::display::window::{PropFormat, PropMode, WindowArguments, WindowValuesBuilder, EventMask, WindowValue, WindowClass, WindowKind, VisualClass};
 use xrs::display::{self, Atom};
 
 
@@ -19,7 +19,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         border_width: 15,
         class: WindowClass::InputOutput,
         visual: root.visual(),
-        values: WindowValuesBuilder::new(&[]),
+        values: WindowValuesBuilder::new(&[WindowValue::EventMask(vec![EventMask::KeyPress, EventMask::KeyRelease])]),
     })?;
 
     let atom = display.intern_atom("TEST2", false)?;

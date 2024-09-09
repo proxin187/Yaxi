@@ -1,10 +1,22 @@
 use super::*;
 
 
+#[derive(Debug, Clone, Copy)]
 pub enum WindowClass {
     CopyFromParent = 0,
     InputOutput = 1,
     InputOnly = 2,
+}
+
+impl From<u16> for WindowClass {
+    fn from(value: u16) -> WindowClass {
+        match value {
+            0 => WindowClass::CopyFromParent,
+            1 => WindowClass::InputOutput,
+            2 => WindowClass::InputOnly,
+            _ => unreachable!(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -83,6 +95,7 @@ pub enum EventMask {
     OwnerGrabButton = 16777216,
 }
 
+// TODO: add cursors
 #[derive(Clone)]
 pub enum Cursor {
 }
@@ -148,7 +161,7 @@ impl WindowValuesBuilder {
     fn mask(&self, masks: Vec<EventMask>) -> u32 {
         masks.iter()
             .map(|event_mask| *event_mask as u32)
-            .fold(0, |acc, x| acc ^ x)
+            .fold(0, |acc, x| acc | x)
     }
 
     fn insert_value(&mut self, value: WindowValue) {
@@ -258,8 +271,7 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
         }
     }
 
-    // TODO: finish this
-    pub fn from_id(stream: Stream<T>, sequence: SequenceManager, id: u32) -> Result<Window<T>, Box<dyn std::error::Error>> {
+    pub fn from_id(mut stream: Stream<T>, mut replies: Queue<Reply>, mut sequence: SequenceManager, id: u32) -> Result<Window<T>, Box<dyn std::error::Error>> {
         stream.send_encode(GetWindowAttributes {
             opcode: Opcode::GET_WINDOW_ATTRIBUTES,
             pad0: 0,
@@ -267,9 +279,21 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
             wid: id,
         })?;
 
-        sequence.append(ReplyKind::GetWindowAttributes);
+        sequence.append(ReplyKind::GetWindowAttributes)?;
 
-        Ok(())
+        match replies.wait()? {
+            Reply::GetWindowAttributes { visual, depth, .. } => {
+                Ok(Window {
+                    stream,
+                    replies,
+                    sequence,
+                    visual,
+                    depth,
+                    id,
+                })
+            },
+            _ => unreachable!(),
+        }
     }
 
     fn generic_window(&mut self, opcode: u8, length: u16) -> Result<(), Box<dyn std::error::Error>> {
@@ -316,6 +340,24 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
         self.sequence.skip();
 
         Ok(Window::new(self.stream.try_clone()?, self.replies.clone(), self.sequence.clone(), window.visual, window.depth, wid))
+    }
+
+    pub fn change_attributes(&mut self, mut values: WindowValuesBuilder) -> Result<(), Box<dyn std::error::Error>> {
+        let request = values.build()?;
+
+        self.stream.send_encode(ChangeWindowAttributes {
+            opcode: Opcode::CHANGE_WINDOW_ATTRIBUTES,
+            pad0: 0,
+            length: values.len(),
+            wid: self.id(),
+            mask: values.value_mask,
+        })?;
+
+        self.stream.send(&request)?;
+
+        self.sequence.skip();
+
+        Ok(())
     }
 
     pub fn reparent(&mut self, parent: Window<T>, x: u16, y: u16) -> Result<(), Box<dyn std::error::Error>> {

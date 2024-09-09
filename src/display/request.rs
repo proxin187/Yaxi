@@ -70,7 +70,7 @@ pub struct PixmapFormat {
 }
 
 #[repr(packed, C)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ScreenResponse {
     pub root: u32,
     pub default_colormap: u32,
@@ -250,6 +250,37 @@ pub struct GetWindowAttributes {
     pub pad0: u8,
     pub length: u16,
     pub wid: u32,
+}
+
+#[repr(packed, C)]
+#[derive(Debug)]
+pub struct GetWindowAttributesResponse {
+    pub length: u32,
+    pub visual: u32,
+    pub class: u16,
+    pub bit_gravity: u8,
+    pub win_gravity: u8,
+    pub backing_planes: u32,
+    pub backing_pixel: u32,
+    pub save_under: u8,
+    pub map_is_installed: u8,
+    pub map_state: u8,
+    pub override_redirect: u8,
+    pub colormap: u32,
+    pub all_event_mask: u32,
+    pub your_event_mask: u32,
+    pub do_not_propogate_mask: u16,
+    pub pad0: [u8; 2],
+}
+
+#[repr(packed, C)]
+#[derive(Debug)]
+pub struct ChangeWindowAttributes {
+    pub opcode: u8,
+    pub pad0: u8,
+    pub length: u16,
+    pub wid: u32,
+    pub mask: u32,
 }
 
 #[repr(packed, C)]
