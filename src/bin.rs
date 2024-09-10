@@ -1,6 +1,6 @@
-use xrs::display::window::{PropFormat, PropMode, WindowArguments, WindowValuesBuilder, EventMask, WindowValue, WindowClass, WindowKind, VisualClass};
-use xrs::display::proto::{Event, KeyEventKind};
-use xrs::display::{self, Atom};
+use rex11::display::window::{PropFormat, PropMode, WindowArguments, WindowValuesBuilder, EventMask, WindowValue, WindowClass, WindowKind, VisualClass};
+use rex11::display::proto::{Event, KeyEventKind};
+use rex11::display::{self, Atom};
 
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
