@@ -1,5 +1,5 @@
 [package]
-name = "xrs"
+name = "rex11"
 version = "0.1.0"
 edition = "2021"
 
@@ -12,7 +12,7 @@ categories = ["api-bindings", "os", "graphics"]
 license = "MIT OR Apache-2.0"
 
 [lib]
-name = "xrs"
+name = "rex11"
 path = "src/lib.rs"
 
 [[bin]]
