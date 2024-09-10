@@ -125,6 +125,8 @@ impl<T> Queue<T> {
     pub fn wait(&mut self) -> Result<T, Box<dyn std::error::Error>> {
         while !self.poll()? {}
 
+        println!("done polling");
+
         lock!(self.queue)?.pop().ok_or(Box::new(Error::NoReply))
     }
 
@@ -169,7 +171,7 @@ impl SequenceManager {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum KeyEventKind {
     Press,
     Release,
@@ -194,14 +196,16 @@ impl Coordinates {
     }
 }
 
-pub enum Event<T: Send + Sync + Read + Write + TryClone> {
+#[derive(Debug)]
+pub enum Event {
     KeyEvent {
         kind: KeyEventKind,
         coordinates: Coordinates,
-        window: Window<T>,
-        root: Window<T>,
-        subwindow: Window<T>,
+        window: u32,
+        root: u32,
+        subwindow: u32,
         state: u16,
+        keycode: u8,
         send_event: bool,
     },
 }

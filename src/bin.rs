@@ -1,4 +1,5 @@
 use xrs::display::window::{PropFormat, PropMode, WindowArguments, WindowValuesBuilder, EventMask, WindowValue, WindowClass, WindowKind, VisualClass};
+use xrs::display::proto::{Event, KeyEventKind};
 use xrs::display::{self, Atom};
 
 
@@ -19,8 +20,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         border_width: 15,
         class: WindowClass::InputOutput,
         visual: root.visual(),
-        values: WindowValuesBuilder::new(&[WindowValue::EventMask(vec![EventMask::KeyPress, EventMask::KeyRelease])]),
+        values: WindowValuesBuilder::new(&[]),
     })?;
+
+    /*
+    println!("getting window from id");
+
+    let mut window = display.window_from_id(window.id())?;
+
+    println!("window from id: {}", window.id());
+    */
 
     let atom = display.intern_atom("TEST2", false)?;
 
@@ -31,6 +40,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     window.change_property(atom, Atom::CARDINAL, PropFormat::Format8, PropMode::Replace, &[2])?;
 
     println!("property: {:?}", window.get_property(atom, Atom::CARDINAL, false)?);
+
+    window.select_input(&[EventMask::KeyPress, EventMask::KeyRelease])?;
+
+    window.map(WindowKind::Window)?;
+
+    let event = display.next_event()?;
+
+    println!("event: {:?}", event);
+
+    match event {
+        Event::KeyEvent { kind, coordinates, window, root, subwindow, state, keycode, send_event } => {
+            let mut window_copy = display.window_from_id(window)?;
+
+            println!("window from id: {}, keycode: {}", window_copy.id(), keycode);
+        },
+    }
+
+    window.destroy(WindowKind::Window)?;
 
     /*
     window.map(WindowKind::Window)?;

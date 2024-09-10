@@ -348,7 +348,7 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
         self.stream.send_encode(ChangeWindowAttributes {
             opcode: Opcode::CHANGE_WINDOW_ATTRIBUTES,
             pad0: 0,
-            length: values.len(),
+            length: values.len() + 3,
             wid: self.id(),
             mask: values.value_mask,
         })?;
@@ -358,6 +358,10 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
         self.sequence.skip();
 
         Ok(())
+    }
+
+    pub fn select_input(&mut self, events: &[EventMask]) -> Result<(), Box<dyn std::error::Error>> {
+        self.change_attributes(WindowValuesBuilder::new(&[WindowValue::EventMask(events.to_vec())]))
     }
 
     pub fn reparent(&mut self, parent: Window<T>, x: u16, y: u16) -> Result<(), Box<dyn std::error::Error>> {

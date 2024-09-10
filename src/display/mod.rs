@@ -229,7 +229,7 @@ impl Roots {
 
 pub struct Display<T> where T: Send + Sync + Read + Write + TryClone {
     stream: Stream<T>,
-    events: Queue<Event<T>>,
+    events: Queue<Event/*<T>*/>,
     replies: Queue<Reply>,
     roots: Roots,
     sequence: SequenceManager,
@@ -250,12 +250,16 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
         Ok(display)
     }
 
-    pub fn next_event(&mut self) -> Result<Event<T>, Box<dyn std::error::Error>> {
+    pub fn next_event(&mut self) -> Result<Event/*<T>*/, Box<dyn std::error::Error>> {
         self.events.wait()
     }
 
     pub fn poll_event(&mut self) -> Result<bool, Box<dyn std::error::Error>> {
         self.events.poll()
+    }
+
+    pub fn window_from_id(&self, id: u32) -> Result<Window<T>, Box<dyn std::error::Error>> {
+        Window::from_id(self.stream.clone(), self.replies.clone(), self.sequence.clone(), id)
     }
 
     pub fn default_root_window(&self) -> Result<Window<T>, Box<dyn std::error::Error>> {
@@ -367,14 +371,14 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
 
 pub struct EventListener<T: Send + Sync + Read + Write + TryClone> {
     stream: Stream<T>,
-    events: Queue<Event<T>>,
+    events: Queue<Event/*<T>*/>,
     replies: Queue<Reply>,
     sequence: SequenceManager,
     roots: Roots,
 }
 
 impl<T> EventListener<T> where T: Send + Sync + Read + Write + TryClone {
-    pub fn new(stream: Stream<T>, events: Queue<Event<T>>, replies: Queue<Reply>, sequence: SequenceManager, roots: Roots) -> EventListener<T> {
+    pub fn new(stream: Stream<T>, events: Queue<Event/*<T>*/>, replies: Queue<Reply>, sequence: SequenceManager, roots: Roots) -> EventListener<T> {
         EventListener {
             stream,
             events,
@@ -437,16 +441,19 @@ impl<T> EventListener<T> where T: Send + Sync + Read + Write + TryClone {
                 Ok(())
             },
             Response::KEY_PRESS | Response::KEY_RELEASE => {
-                let event: KeyEvent = self.stream.recv_decode()?;
+                let key_event: KeyEvent = self.stream.recv_decode()?;
+
+                println!("key event: {:?}", event);
 
                 self.events.push(Event::KeyEvent {
                     kind: KeyEventKind::Press,
-                    coordinates: Coordinates::new(event.event_x, event.event_y, event.root_x, event.root_y),
-                    window: Window::from_id(self.stream.clone(), self.replies.clone(), self.sequence.clone(), event.event)?,
-                    root: Window::from_id(self.stream.clone(), self.replies.clone(), self.sequence.clone(), event.root)?,
-                    subwindow: Window::from_id(self.stream.clone(), self.replies.clone(), self.sequence.clone(), event.child)?,
-                    state: event.state,
-                    send_event: event.same_screen != 0,
+                    coordinates: Coordinates::new(key_event.event_x, key_event.event_y, key_event.root_x, key_event.root_y),
+                    window: key_event.event,
+                    root: key_event.root,
+                    subwindow: key_event.child,
+                    state: key_event.state,
+                    keycode: event.detail,
+                    send_event: key_event.same_screen == 0,
                 })?;
 
                 Ok(())
