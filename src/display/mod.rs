@@ -173,6 +173,21 @@ impl Depth {
     }
 }
 
+#[derive(Clone, Copy)]
+pub struct KeycodeRange {
+    pub min: u8,
+    pub max: u8,
+}
+
+impl KeycodeRange {
+    pub fn new(min: u8, max: u8) -> KeycodeRange {
+        KeycodeRange {
+            min,
+            max,
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct Screen {
     pub response: ScreenResponse,
@@ -227,6 +242,7 @@ pub struct Display<T> where T: Send + Sync + Read + Write + TryClone {
     events: Queue<Event>,
     replies: Queue<Reply>,
     roots: Roots,
+    setup: SuccessResponse,
     sequence: SequenceManager,
 }
 
@@ -237,6 +253,7 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
             events: Queue::new(),
             replies: Queue::new(),
             roots: Roots::new(),
+            setup: SuccessResponse::default(),
             sequence: SequenceManager::new(),
         };
 
@@ -293,6 +310,11 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
         }
     }
 
+    /// get the min and max keycode
+    pub fn display_keycodes(&self) -> KeycodeRange {
+        KeycodeRange::new(self.setup.min_keycode, self.setup.max_keycode)
+    }
+
     fn endian(&self) -> u8 {
         cfg!(target_endian = "little")
             .then(|| 0x6c)
@@ -300,21 +322,19 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
     }
 
     fn read_setup(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        let response: SuccessResponse = self.stream.recv_decode()?;
+        self.setup = self.stream.recv_decode()?;
 
-        println!("response: {:?}", response);
-
-        let vendor = self.stream.recv_str(response.vendor_len as usize)?;
+        let vendor = self.stream.recv_str(self.setup.vendor_len as usize)?;
 
         println!("vendor: {}", vendor);
 
-        let bytes = self.stream.recv(std::mem::size_of::<PixmapFormat>() * response.pixmap_formats_len as usize)?;
+        let bytes = self.stream.recv(std::mem::size_of::<PixmapFormat>() * self.setup.pixmap_formats_len as usize)?;
 
-        let formats: &[PixmapFormat] = request::decode_slice(&bytes, response.pixmap_formats_len as usize);
+        let formats: &[PixmapFormat] = request::decode_slice(&bytes, self.setup.pixmap_formats_len as usize);
 
         // println!("formats: {:?}", formats);
 
-        for _ in 0..response.roots_len {
+        for _ in 0..self.setup.roots_len {
             let mut screen = Screen::new(self.stream.recv_decode()?);
 
             for _ in 0..screen.response.allowed_depths_len {
@@ -344,7 +364,7 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
             }
         });
 
-        xid::setup(response.resource_id_base, response.resource_id_mask)?;
+        xid::setup(self.setup.resource_id_base, self.setup.resource_id_mask)?;
 
         Ok(())
     }

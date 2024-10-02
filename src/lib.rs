@@ -11,4 +11,7 @@ pub mod proto;
 /// window contains the core functionality for handling windows
 pub mod window;
 
+/// keyboard contains keysyms and keycodes for x11
+pub mod keyboard;
+
 

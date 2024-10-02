@@ -1,7 +1,8 @@
 use crate::display::request::{self, *};
-use crate::proto::*;
-use crate::display::xid;
 use crate::display::{Atom, Visual, Roots, Stream, TryClone};
+use crate::display::xid;
+use crate::keyboard::*;
+use crate::proto::*;
 
 use std::io::{Read, Write};
 
@@ -492,7 +493,9 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
         }
     }
 
-    pub fn grab_key(&mut self) {
+    /// grab some keys from the window,
+    /// buttons are not valid modifiers
+    pub fn grab_key(&mut self, modifier: Vec<KeyMask>, keycode: Keycode) {
     }
 }
 

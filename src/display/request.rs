@@ -41,7 +41,7 @@ pub struct SetupResponse {
 }
 
 #[repr(packed, C)]
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct SuccessResponse {
     pub release_number: u32,
     pub resource_id_base: u32,
@@ -148,8 +148,6 @@ pub struct KeyEvent {
     pub same_screen: u8,
     pub pad0: u8,
 }
-
-// TODO: implement all these events
 
 #[repr(packed, C)]
 #[derive(Debug)]
@@ -258,6 +256,8 @@ pub struct MapReq {
     pub parent: u32,
     pub window: u32,
 }
+
+// TODO: IMPLEMENT CLIENT MESSAGE
 
 #[repr(packed, C)]
 #[derive(Debug)]
