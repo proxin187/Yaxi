@@ -255,7 +255,7 @@ pub enum PropMode {
     Append = 2,
 }
 
-pub struct Window<T> {
+pub struct Window<T: Send + Sync + Read + Write + TryClone> {
     stream: Stream<T>,
     replies: Queue<Reply>,
     sequence: SequenceManager,
@@ -276,7 +276,7 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
         }
     }
 
-    pub fn from_id(
+    pub(crate) fn from_id(
         mut stream: Stream<T>,
         mut replies: Queue<Reply>,
         mut sequence: SequenceManager,
@@ -322,12 +322,16 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
         Ok(())
     }
 
+    /// window id
     pub fn id(&self) -> u32 { self.id }
 
+    /// window depth
     pub fn depth(&self) -> u8 { self.depth }
 
+    /// visual assigned to the window
     pub fn visual(&self) -> Visual { self.visual.clone() }
 
+    /// create a child window with provided window arguments
     pub fn create_window(&mut self, mut window: WindowArguments) -> Result<Window<T>, Box<dyn std::error::Error>> {
         let window_values_request = window.values.build()?;
         let wid = xid::next()?;
@@ -355,6 +359,7 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
         Ok(Window::new(self.stream.try_clone()?, self.replies.clone(), self.sequence.clone(), window.visual, window.depth, wid))
     }
 
+    /// change the attributes of a window
     pub fn change_attributes(&mut self, mut values: WindowValuesBuilder) -> Result<(), Box<dyn std::error::Error>> {
         let request = values.build()?;
 
@@ -373,10 +378,12 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
         Ok(())
     }
 
+    /// choose the events you want to recieve
     pub fn select_input(&mut self, events: &[EventMask]) -> Result<(), Box<dyn std::error::Error>> {
         self.change_attributes(WindowValuesBuilder::new(&[WindowValue::EventMask(events.to_vec())]))
     }
 
+    /// become the child of a parent window
     pub fn reparent(&mut self, parent: Window<T>, x: u16, y: u16) -> Result<(), Box<dyn std::error::Error>> {
         self.sequence.skip();
 
@@ -391,18 +398,22 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
         })
     }
 
-    pub fn destroy(&mut self, kind: WindowKind) -> Result<(), Box<dyn std::error::Error>> {
+    /// destroy the current window object
+    pub fn destroy(mut self, kind: WindowKind) -> Result<(), Box<dyn std::error::Error>> {
         self.generic_window(kind.encode(Opcode::DESTROY_SUBWINDOWS, Opcode::DESTROY_WINDOW), 2)
     }
 
+    /// map the window onto the screen
     pub fn map(&mut self, kind: WindowKind) -> Result<(), Box<dyn std::error::Error>> {
         self.generic_window(kind.encode(Opcode::MAP_SUBWINDOWS, Opcode::MAP_WINDOW), 2)
     }
 
+    /// unmap the window
     pub fn unmap(&mut self, kind: WindowKind) -> Result<(), Box<dyn std::error::Error>> {
         self.generic_window(kind.encode(Opcode::UNMAP_SUBWINDOWS, Opcode::UNMAP_WINDOW), 2)
     }
 
+    /// change a property of a window
     pub fn change_property(
         &mut self,
         property: Atom,
@@ -432,6 +443,7 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
         Ok(())
     }
 
+    /// delete a property from a window
     pub fn delete_property(&mut self, property: Atom) -> Result<(), Box<dyn std::error::Error>> {
         self.generic_window(Opcode::DELETE_PROPERTY, 3)?;
 
@@ -442,6 +454,7 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
         Ok(())
     }
 
+    /// get the value of a property from a window
     pub fn get_property(&mut self, property: Atom, type_: Atom, delete: bool) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
         self.stream.send_encode(GetProperty {
             opcode: Opcode::GET_PROPERTY,
@@ -462,6 +475,7 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
         }
     }
 
+    /// get info about the pointer such as position
     pub fn query_pointer(&mut self) -> Result<QueryPointerResponse, Box<dyn std::error::Error>> {
         self.stream.send_encode(QueryPointer {
             opcode: Opcode::QUERY_POINTER,

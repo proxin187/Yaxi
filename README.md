@@ -1,21 +1,30 @@
-<h1 align="center">
-    <br>
-    <a href="https://github.com/proxin187/yaxi">
-        <img src="assets/logo1.png" width="400">
-    </a>
-    <br>
-</h1>
+<div align="center">
+<br>
+<a href="https://github.com/proxin187/yaxi">
+    <img src="assets/logo1.png" width="400">
+</a>
+<br>
 
-<h4 align="center">yaxi is a x11 library written from scratch</h4>
+![GitHub License](https://img.shields.io/badge/license-MIT-red?style=for-the-badge&logo=none)
+![dependencies](https://deps.rs/repo/github/proxin187/yaxi/status.svg?style=for-the-badge)
+[![Crates.io](https://img.shields.io/badge/yaxi-red?style=for-the-badge&logo=none)](https://crates.io/crates/yaxi)
 
-> [!WARNING]
-> yaxi is a work-in-progress library and breaking changes may occur.
+<h4>yaxi is a x11 library written from scratch</h4>
+</div>
 
 ## Key Features
 
 * Clean Interface - yaxi provides a clean interface, making it perfect for both beginners and experienced developers
 * Safety - yaxi has safe interface for x11 unlike many other x11 libraries
 * Not A Wrapper - yaxi is a pure rust implementation and is NOT a wrapper
+
+## Goals
+- [X] Authorization
+- [X] Requests and Replies
+- [X] events (most)
+- [ ] Extensions (Xinerama, Xft, ...)
+- [ ] Comprehensive Documentation
+- [ ] Window Manager in yaxi (work in progress)
 
 ## Example
 
@@ -64,13 +73,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 ```
-
-## Roadmap
-
-- [X] Authorization
-- [X] Requests and Replies
-- [X] events (most)
-- [ ] Window Manager in yaxi (work in progress)
 
 ## License
 

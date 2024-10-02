@@ -245,18 +245,22 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
         Ok(display)
     }
 
+    /// wait for the next event
     pub fn next_event(&mut self) -> Result<Event, Box<dyn std::error::Error>> {
         self.events.wait()
     }
 
+    /// returns true if an event is ready
     pub fn poll_event(&mut self) -> Result<bool, Box<dyn std::error::Error>> {
         self.events.poll()
     }
 
+    /// get the window from its id
     pub fn window_from_id(&self, id: u32) -> Result<Window<T>, Box<dyn std::error::Error>> {
         Window::from_id(self.stream.clone(), self.replies.clone(), self.sequence.clone(), self.roots.clone(), id)
     }
 
+    /// get the default root window of a display
     pub fn default_root_window(&self) -> Result<Window<T>, Box<dyn std::error::Error>> {
         let stream = self.stream.try_clone()?;
         let screen = self.roots.first()?;
@@ -264,6 +268,7 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
         Ok(Window::<T>::new(stream, self.replies.clone(), self.sequence.clone(), self.roots.visual_from_id(screen.response.root_visual)?, screen.response.root_depth, screen.response.root))
     }
 
+    /// get an atom from its name
     pub fn intern_atom<'a>(&mut self, name: &'a str, only_if_exists: bool) -> Result<Atom, Box<dyn std::error::Error>> {
         let request = InternAtom {
             opcode: Opcode::INTERN_ATOM,
