@@ -1,7 +1,7 @@
 <h1 align="center">
     <br>
     <a href="https://github.com/proxin187/yaxi">
-        <img src="assets/logo.png" width="400">
+        <img src="assets/logo1.png" width="400">
     </a>
     <br>
 </h1>
