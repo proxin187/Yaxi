@@ -1,8 +1,9 @@
-use super::{Window, WindowClass, Visual, Error, TryClone};
+use crate::display::request::*;
+use crate::display::error::Error;
+use crate::display::Atom;
 
 use std::sync::atomic::{Ordering, AtomicU16};
 use std::sync::{Arc, Mutex};
-use std::io::{Read, Write};
 
 macro_rules! lock {
     ($mutex:expr) => {
@@ -19,6 +20,22 @@ impl Response {
 
     pub const KEY_PRESS: u8 = 2;
     pub const KEY_RELEASE: u8 = 3;
+    pub const CREATE_NOTIFY: u8 = 16;
+    pub const DESTROY_NOTIFY: u8 = 17;
+    pub const UNMAP_NOTIFY: u8 = 18;
+    pub const MAP_NOTIFY: u8 = 19;
+    pub const MAP_REQUEST: u8 = 20;
+    pub const REPARENT_NOTIFY: u8 = 21;
+    pub const CONFIGURE_NOTIFY: u8 = 22;
+    pub const CONFIGURE_REQUEST: u8 = 23;
+    pub const GRAVITY_NOTIFY: u8 = 24;
+    pub const CIRCULATE_NOTIFY: u8 = 26;
+    pub const CIRCULATE_REQUEST: u8 = 27;
+    pub const SELECTION_CLEAR: u8 = 29;
+    pub const SELECTION_REQUEST: u8 = 30;
+    pub const SELECTION_NOTIFY: u8 = 31;
+    pub const CLIENT_MESSAGE: u8 = 33;
+    pub const MAPPING_NOTIFY: u8 = 34;
 }
 
 #[non_exhaustive]
@@ -39,6 +56,7 @@ impl Opcode {
     pub const CHANGE_PROPERTY: u8 = 18;
     pub const DELETE_PROPERTY: u8 = 19;
     pub const GET_PROPERTY: u8 = 20;
+    pub const QUERY_POINTER: u8 = 38;
 }
 
 #[non_exhaustive]
@@ -66,16 +84,11 @@ impl ErrorCode {
 
 #[derive(Debug, Clone)]
 pub enum Reply {
-    InternAtom {
-        atom: u32
-    },
+    InternAtom(InternAtomResponse),
+    GetWindowAttributes(GetWindowAttributesResponse),
+    QueryPointer(QueryPointerResponse),
     GetProperty {
         value: Vec<u8>,
-    },
-    GetWindowAttributes {
-        visual: Visual,
-        class: WindowClass,
-        depth: u8,
     },
 }
 
@@ -84,6 +97,7 @@ pub enum ReplyKind {
     InternAtom,
     GetProperty,
     GetWindowAttributes,
+    QueryPointer,
 }
 
 #[derive(Debug)]
@@ -124,8 +138,6 @@ impl<T> Queue<T> {
 
     pub fn wait(&mut self) -> Result<T, Box<dyn std::error::Error>> {
         while !self.poll()? {}
-
-        println!("done polling");
 
         lock!(self.queue)?.pop().ok_or(Box::new(Error::NoReply))
     }
@@ -197,6 +209,44 @@ impl Coordinates {
 }
 
 #[derive(Debug)]
+pub enum StackMode {
+    Above,
+    Below,
+    TopIf,
+    BottomIf,
+    Opposite,
+}
+
+impl From<u8> for StackMode {
+    fn from(value: u8) -> StackMode {
+        match value {
+            0 => StackMode::Above,
+            1 => StackMode::Below,
+            2 => StackMode::TopIf,
+            3 => StackMode::BottomIf,
+            4 => StackMode::Opposite,
+            _ => unreachable!(),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum Place {
+    Top,
+    Bottom,
+}
+
+impl From<u8> for Place {
+    fn from(value: u8) -> Place {
+        match value {
+            0 => Place::Top,
+            1 => Place::Bottom,
+            _ => unreachable!(),
+        }
+    }
+}
+
+#[derive(Debug)]
 pub enum Event {
     KeyEvent {
         kind: KeyEventKind,
@@ -207,6 +257,108 @@ pub enum Event {
         state: u16,
         keycode: u8,
         send_event: bool,
+    },
+    CreateNotify {
+        parent: u32,
+        window: u32,
+        x: u16,
+        y: u16,
+        width: u16,
+        height: u16,
+    },
+    DestroyNotify {
+        event: u32,
+        window: u32,
+    },
+    UnmapNotify {
+        event: u32,
+        window: u32,
+        configure: bool,
+    },
+    MapNotify {
+        event: u32,
+        window: u32,
+        override_redirect: bool,
+    },
+    MapRequest {
+        parent: u32,
+        window: u32,
+    },
+    ReparentNotify {
+        event: u32,
+        window: u32,
+        parent: u32,
+        x: u16,
+        y: u16,
+        override_redirect: bool,
+    },
+    ConfigureNotify {
+        event: u32,
+        window: u32,
+        above_sibling: u32,
+        x: u16,
+        y: u16,
+        width: u16,
+        height: u16,
+        border_width: u16,
+        override_redirect: bool,
+    },
+    ConfigureRequest {
+        stack_mode: StackMode,
+        parent: u32,
+        window: u32,
+        sibling: u32,
+        x: u16,
+        y: u16,
+        width: u16,
+        height: u16,
+        border_width: u16,
+        mask: u16,
+    },
+    GravityNotify {
+        event: u32,
+        window: u32,
+        x: u16,
+        y: u16,
+    },
+    CirculateNotify {
+        event: u32,
+        window: u32,
+        place: Place,
+    },
+    CirculateRequest {
+        parent: u32,
+        window: u32,
+        place: Place,
+    },
+    SelectionClear {
+        time: u32,
+        owner: u32,
+        selection: Atom,
+    },
+    SelectionRequest {
+        time: u32,
+        owner: u32,
+        selection: Atom,
+        target: Atom,
+        property: Atom,
+    },
+    SelectionNotify {
+        time: u32,
+        requestor: u32,
+        selection: Atom,
+        target: Atom,
+        property: Atom,
+    },
+    ClientMessage {
+        format: u8,
+        window: u32,
+        type_: Atom,
+    },
+    MappingNotify {
+        request: u8,
+        keycode: u8,
+        count: u8,
     },
 }
 

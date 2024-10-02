@@ -1,4 +1,9 @@
-use super::*;
+use crate::display::request::{self, *};
+use crate::proto::*;
+use crate::display::xid;
+use crate::display::{Atom, Visual, Roots, Stream, TryClone};
+
+use std::io::{Read, Write};
 
 
 #[derive(Debug, Clone, Copy)]
@@ -271,7 +276,15 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
         }
     }
 
-    pub fn from_id(mut stream: Stream<T>, mut replies: Queue<Reply>, mut sequence: SequenceManager, id: u32) -> Result<Window<T>, Box<dyn std::error::Error>> {
+    pub fn from_id(
+        mut stream: Stream<T>,
+        mut replies: Queue<Reply>,
+        mut sequence: SequenceManager,
+        roots: Roots,
+        id: u32
+    ) -> Result<Window<T>, Box<dyn std::error::Error>> {
+        let screen = roots.first()?;
+
         stream.send_encode(GetWindowAttributes {
             opcode: Opcode::GET_WINDOW_ATTRIBUTES,
             pad0: 0,
@@ -282,13 +295,13 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
         sequence.append(ReplyKind::GetWindowAttributes)?;
 
         match replies.wait()? {
-            Reply::GetWindowAttributes { visual, depth, .. } => {
+            Reply::GetWindowAttributes(response) => {
                 Ok(Window {
                     stream,
                     replies,
                     sequence,
-                    visual,
-                    depth,
+                    visual: roots.visual_from_id(response.visual)?,
+                    depth: screen.response.root_depth,
                     id,
                 })
             },
@@ -335,7 +348,7 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
             value_mask: window.values.value_mask,
         })?;
 
-        self.stream.inner.write_all(&window_values_request)?;
+        self.stream.send(&window_values_request)?;
 
         self.sequence.skip();
 
@@ -445,6 +458,22 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
 
         match self.replies.wait()? {
             Reply::GetProperty { value } => Ok(value),
+            _ => unreachable!(),
+        }
+    }
+
+    pub fn query_pointer(&mut self) -> Result<QueryPointerResponse, Box<dyn std::error::Error>> {
+        self.stream.send_encode(QueryPointer {
+            opcode: Opcode::QUERY_POINTER,
+            pad0: 0,
+            length: 2,
+            wid: self.id(),
+        })?;
+
+        self.sequence.append(ReplyKind::QueryPointer)?;
+
+        match self.replies.wait()? {
+            Reply::QueryPointer(response) => Ok(response),
             _ => unreachable!(),
         }
     }

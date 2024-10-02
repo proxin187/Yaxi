@@ -1,14 +1,12 @@
-pub mod window;
-pub mod error;
-pub mod proto;
-mod request;
-mod auth;
-mod xid;
+pub(crate) mod error;
+pub(crate) mod request;
+pub(crate) mod auth;
+pub(crate) mod xid;
 
-use error::Error;
-use proto::*;
+use crate::proto::*;
+use crate::window::*;
 use request::*;
-use window::*;
+use error::Error;
 
 use std::os::unix::net::UnixStream;
 use std::net::{SocketAddr, TcpStream};
@@ -17,6 +15,7 @@ use std::fs::File;
 use std::thread;
 
 // https://www.x.org/docs/XProtocol/proto.pdf
+
 
 const X_TCP_PORT: u16 = 6000;
 const X_PROTOCOL: u16 = 11;
@@ -67,17 +66,17 @@ impl<T> Stream<T> where T: Send + Sync + Read + Write + TryClone {
         }
     }
 
-    fn try_clone(&self) -> Result<Stream<T>, Box<dyn std::error::Error>> {
+    pub fn try_clone(&self) -> Result<Stream<T>, Box<dyn std::error::Error>> {
         Ok(Stream {
             inner: self.inner.try_clone()?,
         })
     }
 
-    fn send(&mut self, request: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn send(&mut self, request: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
         self.inner.write_all(request).map_err(|err| err.into())
     }
 
-    fn send_arr(&mut self, requests: &[Vec<u8>]) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn send_arr(&mut self, requests: &[Vec<u8>]) -> Result<(), Box<dyn std::error::Error>> {
         for request in requests {
             self.send(request)?;
         }
@@ -85,7 +84,7 @@ impl<T> Stream<T> where T: Send + Sync + Read + Write + TryClone {
         Ok(())
     }
 
-    fn send_pad(&mut self, request: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn send_pad(&mut self, request: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
         self.send(request)?;
 
         self.send(&vec![0u8; request::pad(request.len())])?;
@@ -93,11 +92,11 @@ impl<T> Stream<T> where T: Send + Sync + Read + Write + TryClone {
         Ok(())
     }
 
-    fn send_encode<E>(&mut self, object: E) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn send_encode<E>(&mut self, object: E) -> Result<(), Box<dyn std::error::Error>> {
         self.send(request::encode(&object))
     }
 
-    fn recv(&mut self, size: usize) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    pub fn recv(&mut self, size: usize) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
         let mut buffer = vec![0u8; size];
 
         match self.inner.read_exact(&mut buffer) {
@@ -106,7 +105,7 @@ impl<T> Stream<T> where T: Send + Sync + Read + Write + TryClone {
         }
     }
 
-    fn recv_str(&mut self, size: usize) -> Result<String, Box<dyn std::error::Error>> {
+    pub fn recv_str(&mut self, size: usize) -> Result<String, Box<dyn std::error::Error>> {
         let bytes = self.recv(size)?;
 
         self.recv(size % 4)?;
@@ -114,7 +113,7 @@ impl<T> Stream<T> where T: Send + Sync + Read + Write + TryClone {
         Ok(String::from_utf8(bytes)?)
     }
 
-    fn recv_decode<R>(&mut self) -> Result<R, Box<dyn std::error::Error>> {
+    pub fn recv_decode<R>(&mut self) -> Result<R, Box<dyn std::error::Error>> {
         let bytes = self.recv(std::mem::size_of::<R>())?;
 
         Ok(request::decode(&bytes))
@@ -122,22 +121,18 @@ impl<T> Stream<T> where T: Send + Sync + Read + Write + TryClone {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct Atom<'a> {
+pub struct Atom {
     id: u32,
-    name: &'a str,
 }
 
-impl<'a> Atom<'a> {
-    pub const CARDINAL: Atom<'static> = Atom::new(6, "CARDINAL");
+impl Atom {
+    pub const CARDINAL: Atom = Atom::new(6);
 
-    pub const fn new(id: u32, name: &'a str) -> Atom {
+    pub const fn new(id: u32) -> Atom {
         Atom {
             id,
-            name,
         }
     }
-
-    pub fn name(&self) -> &'a str { self.name }
 
     pub fn id(&self) -> u32 { self.id }
 }
@@ -180,8 +175,8 @@ impl Depth {
 
 #[derive(Clone)]
 pub struct Screen {
-    response: ScreenResponse,
-    depths: Vec<Depth>,
+    pub response: ScreenResponse,
+    pub depths: Vec<Depth>,
 }
 
 impl Screen {
@@ -229,7 +224,7 @@ impl Roots {
 
 pub struct Display<T> where T: Send + Sync + Read + Write + TryClone {
     stream: Stream<T>,
-    events: Queue<Event/*<T>*/>,
+    events: Queue<Event>,
     replies: Queue<Reply>,
     roots: Roots,
     sequence: SequenceManager,
@@ -250,7 +245,7 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
         Ok(display)
     }
 
-    pub fn next_event(&mut self) -> Result<Event/*<T>*/, Box<dyn std::error::Error>> {
+    pub fn next_event(&mut self) -> Result<Event, Box<dyn std::error::Error>> {
         self.events.wait()
     }
 
@@ -259,7 +254,7 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
     }
 
     pub fn window_from_id(&self, id: u32) -> Result<Window<T>, Box<dyn std::error::Error>> {
-        Window::from_id(self.stream.clone(), self.replies.clone(), self.sequence.clone(), id)
+        Window::from_id(self.stream.clone(), self.replies.clone(), self.sequence.clone(), self.roots.clone(), id)
     }
 
     pub fn default_root_window(&self) -> Result<Window<T>, Box<dyn std::error::Error>> {
@@ -269,7 +264,7 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
         Ok(Window::<T>::new(stream, self.replies.clone(), self.sequence.clone(), self.roots.visual_from_id(screen.response.root_visual)?, screen.response.root_depth, screen.response.root))
     }
 
-    pub fn intern_atom<'a>(&mut self, name: &'a str, only_if_exists: bool) -> Result<Atom<'a>, Box<dyn std::error::Error>> {
+    pub fn intern_atom<'a>(&mut self, name: &'a str, only_if_exists: bool) -> Result<Atom, Box<dyn std::error::Error>> {
         let request = InternAtom {
             opcode: Opcode::INTERN_ATOM,
             only_if_exists: only_if_exists.then(|| 1).unwrap_or(0),
@@ -285,9 +280,9 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
         self.sequence.append(ReplyKind::InternAtom)?;
 
         match self.replies.wait()? {
-            Reply::InternAtom { atom } => match atom {
+            Reply::InternAtom(response) => match response.atom {
                 u32::MIN => Err(Box::new(Error::InvalidAtom)),
-                _ => Ok(Atom::new(atom, name)),
+                _ => Ok(Atom::new(response.atom)),
             },
             _ => unreachable!(),
         }
@@ -371,14 +366,14 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
 
 pub struct EventListener<T: Send + Sync + Read + Write + TryClone> {
     stream: Stream<T>,
-    events: Queue<Event/*<T>*/>,
+    events: Queue<Event>,
     replies: Queue<Reply>,
     sequence: SequenceManager,
     roots: Roots,
 }
 
 impl<T> EventListener<T> where T: Send + Sync + Read + Write + TryClone {
-    pub fn new(stream: Stream<T>, events: Queue<Event/*<T>*/>, replies: Queue<Reply>, sequence: SequenceManager, roots: Roots) -> EventListener<T> {
+    pub fn new(stream: Stream<T>, events: Queue<Event>, replies: Queue<Reply>, sequence: SequenceManager, roots: Roots) -> EventListener<T> {
         EventListener {
             stream,
             events,
@@ -395,9 +390,17 @@ impl<T> EventListener<T> where T: Send + Sync + Read + Write + TryClone {
             ReplyKind::InternAtom => {
                 let response: InternAtomResponse = self.stream.recv_decode()?;
 
-                self.replies.push(Reply::InternAtom {
-                    atom: response.atom,
-                })?;
+                self.replies.push(Reply::InternAtom(response))?;
+            },
+            ReplyKind::GetWindowAttributes => {
+                let response: GetWindowAttributesResponse = self.stream.recv_decode()?;
+
+                self.replies.push(Reply::GetWindowAttributes(response))?;
+            },
+            ReplyKind::QueryPointer => {
+                let response: QueryPointerResponse = self.stream.recv_decode()?;
+
+                self.replies.push(Reply::QueryPointer(response))?;
             },
             ReplyKind::GetProperty => {
                 let response: GetPropertyResponse = self.stream.recv_decode()?;
@@ -408,55 +411,211 @@ impl<T> EventListener<T> where T: Send + Sync + Read + Write + TryClone {
 
                 self.stream.recv(request::pad(response.value_len as usize))?;
             },
-            ReplyKind::GetWindowAttributes => {
-                let response: GetWindowAttributesResponse = self.stream.recv_decode()?;
-                let screen = self.roots.first()?;
-
-                self.replies.push(Reply::GetWindowAttributes {
-                    visual: self.roots.visual_from_id(response.visual)?,
-                    class: WindowClass::from(response.class),
-                    depth: screen.response.root_depth,
-                })?;
-            },
         }
 
         Ok(())
     }
 
-    fn handle_event(&mut self, event: GenericEvent) -> Result<(), Box<dyn std::error::Error>> {
-        match event.opcode & 0b0111111 {
+    fn handle_event(&mut self, generic: GenericEvent) -> Result<(), Box<dyn std::error::Error>> {
+        match generic.opcode & 0b0111111 {
             Response::ERROR => {
                 let error: ErrorEvent = self.stream.recv_decode()?;
 
                 println!("error: {:?}", error);
 
                 Err(Box::new(Error::Event {
-                    detail: event.detail,
-                    sequence: event.sequence,
+                    detail: generic.detail,
+                    sequence: generic.sequence,
                 }))
             },
             Response::REPLY => {
-                self.handle_reply(event)?;
+                self.handle_reply(generic)?;
 
                 Ok(())
             },
             Response::KEY_PRESS | Response::KEY_RELEASE => {
                 let key_event: KeyEvent = self.stream.recv_decode()?;
 
-                println!("key event: {:?}", event);
-
                 self.events.push(Event::KeyEvent {
-                    kind: KeyEventKind::Press,
+                    kind: match generic.opcode & 0b0111111 {
+                        Response::KEY_PRESS => KeyEventKind::Press,
+                        Response::KEY_RELEASE => KeyEventKind::Release,
+                        _ => unreachable!(),
+                    },
                     coordinates: Coordinates::new(key_event.event_x, key_event.event_y, key_event.root_x, key_event.root_y),
                     window: key_event.event,
                     root: key_event.root,
                     subwindow: key_event.child,
                     state: key_event.state,
-                    keycode: event.detail,
+                    keycode: generic.detail,
                     send_event: key_event.same_screen == 0,
-                })?;
+                })
+            },
+            Response::CREATE_NOTIFY => {
+                let event: CreateNotify = self.stream.recv_decode()?;
 
-                Ok(())
+                self.events.push(Event::CreateNotify {
+                    parent: event.event,
+                    window: event.window,
+                    x: event.x,
+                    y: event.y,
+                    width: event.height,
+                    height: event.height,
+                })
+            },
+            Response::DESTROY_NOTIFY => {
+                let event: DestroyNotify = self.stream.recv_decode()?;
+
+                self.events.push(Event::DestroyNotify {
+                    event: event.event,
+                    window: event.window,
+                })
+            },
+            Response::UNMAP_NOTIFY => {
+                let event: UnmapNotify = self.stream.recv_decode()?;
+
+                self.events.push(Event::UnmapNotify {
+                    event: event.event,
+                    window: event.window,
+                    configure: event.from_configure == 0,
+                })
+            },
+            Response::MAP_NOTIFY => {
+                let event: MapNotify = self.stream.recv_decode()?;
+
+                self.events.push(Event::MapNotify {
+                    event: event.event,
+                    window: event.window,
+                    override_redirect: event.override_redirect == 0,
+                })
+            },
+            Response::MAP_REQUEST => {
+                let event: MapReq = self.stream.recv_decode()?;
+
+                self.events.push(Event::MapRequest {
+                    parent: event.parent,
+                    window: event.window,
+                })
+            },
+            Response::REPARENT_NOTIFY => {
+                let event: ReparentNotify = self.stream.recv_decode()?;
+
+                self.events.push(Event::ReparentNotify {
+                    event: event.event,
+                    parent: event.parent,
+                    window: event.window,
+                    x: event.x,
+                    y: event.y,
+                    override_redirect: event.override_redirect == 0,
+                })
+            },
+            Response::CONFIGURE_NOTIFY => {
+                let event: ConfigNotify = self.stream.recv_decode()?;
+
+                self.events.push(Event::ConfigureNotify {
+                    event: event.event,
+                    window: event.window,
+                    above_sibling: event.above_sibling,
+                    x: event.x,
+                    y: event.y,
+                    width: event.height,
+                    height: event.height,
+                    border_width: event.border_width,
+                    override_redirect: event.override_redirect == 0,
+                })
+            },
+            Response::CONFIGURE_REQUEST => {
+                let event: ConfigReq = self.stream.recv_decode()?;
+
+                self.events.push(Event::ConfigureRequest {
+                    stack_mode: StackMode::from(generic.detail),
+                    parent: event.parent,
+                    window: event.window,
+                    sibling: event.sibling,
+                    x: event.x,
+                    y: event.y,
+                    width: event.height,
+                    height: event.height,
+                    border_width: event.border_width,
+                    mask: event.value_mask,
+                })
+            },
+            Response::GRAVITY_NOTIFY => {
+                let event: GravityNotify = self.stream.recv_decode()?;
+
+                self.events.push(Event::GravityNotify {
+                    event: event.event,
+                    window: event.window,
+                    x: event.x,
+                    y: event.y,
+                })
+            },
+            Response::CIRCULATE_NOTIFY => {
+                let event: CircNotify = self.stream.recv_decode()?;
+
+                self.events.push(Event::CirculateNotify {
+                    event: event.event,
+                    window: event.window,
+                    place: Place::from(event.place),
+                })
+            },
+            Response::CIRCULATE_REQUEST => {
+                let event: CircReq = self.stream.recv_decode()?;
+
+                self.events.push(Event::CirculateRequest {
+                    parent: event.event,
+                    window: event.window,
+                    place: Place::from(event.place),
+                })
+            },
+            Response::SELECTION_CLEAR => {
+                let event: SelectionClear = self.stream.recv_decode()?;
+
+                self.events.push(Event::SelectionClear {
+                    time: event.time,
+                    owner: event.owner,
+                    selection: Atom::new(event.selection),
+                })
+            },
+            Response::SELECTION_REQUEST => {
+                let event: SelectionReq = self.stream.recv_decode()?;
+
+                self.events.push(Event::SelectionRequest {
+                    time: event.time,
+                    owner: event.requestor,
+                    selection: Atom::new(event.selection),
+                    target: Atom::new(event.target),
+                    property: Atom::new(event.property),
+                })
+            },
+            Response::SELECTION_NOTIFY => {
+                let event: SelectionNotify = self.stream.recv_decode()?;
+
+                self.events.push(Event::SelectionNotify {
+                    time: event.time,
+                    requestor: event.requestor,
+                    selection: Atom::new(event.selection),
+                    target: Atom::new(event.target),
+                    property: Atom::new(event.property),
+                })
+            },
+            Response::CLIENT_MESSAGE => {
+                let event: CircReq = self.stream.recv_decode()?;
+
+                self.events.push(Event::CirculateRequest {
+                    parent: event.event,
+                    window: event.window,
+                    place: Place::from(event.place),
+                })
+            },
+            Response::MAPPING_NOTIFY => {
+                let event: MappingNotify = self.stream.recv_decode()?;
+
+                self.events.push(Event::MappingNotify {
+                    request: event.request,
+                    keycode: event.keycode,
+                    count: event.count,
+                })
             },
             _ => Ok(()),
         }

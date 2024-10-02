@@ -149,6 +149,164 @@ pub struct KeyEvent {
     pub pad0: u8,
 }
 
+// TODO: implement all these events
+
+#[repr(packed, C)]
+#[derive(Debug)]
+pub struct CircNotify {
+    pub event: u32,
+    pub window: u32,
+    pub pad1: [u8; 4],
+    pub place: u8,
+    pub pad2: [u8; 3],
+}
+
+#[repr(packed, C)]
+#[derive(Debug)]
+pub struct ConfigNotify {
+    pub event: u32,
+    pub window: u32,
+    pub above_sibling: u32,
+    pub x: u16,
+    pub y: u16,
+    pub width: u16,
+    pub height: u16,
+    pub border_width: u16,
+    pub override_redirect: u8,
+    pub pad1: u8,
+}
+
+#[repr(packed, C)]
+#[derive(Debug)]
+pub struct CreateNotify {
+    pub event: u32,
+    pub window: u32,
+    pub x: u16,
+    pub y: u16,
+    pub width: u16,
+    pub height: u16,
+    pub border_width: u16,
+    pub override_redirect: u8,
+    pub pad1: u8,
+}
+
+#[repr(packed, C)]
+#[derive(Debug)]
+pub struct DestroyNotify {
+    pub event: u32,
+    pub window: u32,
+}
+
+#[repr(packed, C)]
+#[derive(Debug)]
+pub struct GravityNotify {
+    pub event: u32,
+    pub window: u32,
+    pub x: u16,
+    pub y: u16,
+}
+
+#[repr(packed, C)]
+#[derive(Debug)]
+pub struct MapNotify {
+    pub event: u32,
+    pub window: u32,
+    pub override_redirect: u8,
+    pub pad1: [u8; 3],
+}
+
+#[repr(packed, C)]
+#[derive(Debug)]
+pub struct ReparentNotify {
+    pub event: u32,
+    pub window: u32,
+    pub parent: u32,
+    pub x: u16,
+    pub y: u16,
+    pub override_redirect: u8,
+    pub pad1: [u8; 3],
+}
+
+#[repr(packed, C)]
+#[derive(Debug)]
+pub struct UnmapNotify {
+    pub event: u32,
+    pub window: u32,
+    pub from_configure: u8,
+    pub pad1: [u8; 3],
+}
+
+pub type CircReq = CircNotify;
+
+#[repr(packed, C)]
+#[derive(Debug)]
+pub struct ConfigReq {
+    pub parent: u32,
+    pub window: u32,
+    pub sibling: u32,
+    pub x: u16,
+    pub y: u16,
+    pub width: u16,
+    pub height: u16,
+    pub border_width: u16,
+    pub value_mask: u16,
+}
+
+#[repr(packed, C)]
+#[derive(Debug)]
+pub struct MapReq {
+    pub parent: u32,
+    pub window: u32,
+}
+
+#[repr(packed, C)]
+#[derive(Debug)]
+pub struct ClientMessage {
+    pub parent: u32,
+    pub type_: u32,
+    pub data: [u8; 20],
+}
+
+#[repr(packed, C)]
+#[derive(Debug)]
+pub struct MappingNotify {
+    pub request: u8,
+    pub keycode: u8,
+    pub count: u8,
+    pub pad0: [u8; 25],
+}
+
+#[repr(packed, C)]
+#[derive(Debug)]
+pub struct SelectionClear {
+    pub time: u32,
+    pub owner: u32,
+    pub selection: u32,
+    pub pad0: [u8; 16],
+}
+
+#[repr(packed, C)]
+#[derive(Debug)]
+pub struct SelectionNotify {
+    pub time: u32,
+    pub requestor: u32,
+    pub selection: u32,
+    pub target: u32,
+    pub property: u32,
+    pub pad0: [u8; 8],
+}
+
+#[repr(packed, C)]
+#[derive(Debug)]
+pub struct SelectionReq {
+    pub time: u32,
+    pub requestor: u32,
+    pub selection: u32,
+    pub target: u32,
+    pub property: u32,
+    pub pad0: [u8; 8],
+}
+
 #[repr(packed, C)]
 #[derive(Debug)]
 pub struct CreateWindow {
@@ -187,11 +345,11 @@ pub struct InternAtom {
 }
 
 #[repr(packed, C)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct InternAtomResponse {
-    pub length: u32,
+    pub(crate) length: u32,
     pub atom: u32,
-    pub pad0: [u8; 20],
+    pub(crate) pad0: [u8; 20],
 }
 
 #[repr(packed, C)]
@@ -222,7 +380,7 @@ pub struct GetProperty {
 }
 
 #[repr(packed, C)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct GetPropertyResponse {
     pub length: u32,
     pub type_: u32,
@@ -253,9 +411,9 @@ pub struct GetWindowAttributes {
 }
 
 #[repr(packed, C)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct GetWindowAttributesResponse {
-    pub length: u32,
+    pub(crate) length: u32,
     pub visual: u32,
     pub class: u16,
     pub bit_gravity: u8,
@@ -270,7 +428,7 @@ pub struct GetWindowAttributesResponse {
     pub all_event_mask: u32,
     pub your_event_mask: u32,
     pub do_not_propogate_mask: u16,
-    pub pad0: [u8; 2],
+    pub(crate) pad0: [u8; 2],
 }
 
 #[repr(packed, C)]
@@ -281,6 +439,29 @@ pub struct ChangeWindowAttributes {
     pub length: u16,
     pub wid: u32,
     pub mask: u32,
+}
+
+#[repr(packed, C)]
+#[derive(Debug)]
+pub struct QueryPointer {
+    pub opcode: u8,
+    pub pad0: u8,
+    pub length: u16,
+    pub wid: u32,
+}
+
+#[repr(packed, C)]
+#[derive(Debug, Clone)]
+pub struct QueryPointerResponse {
+    pub(crate) length: u32,
+    pub root: u32,
+    pub child: u32,
+    pub root_x: u16,
+    pub root_y: u16,
+    pub win_x: u16,
+    pub win_y: u16,
+    pub mask: u16,
+    pub(crate) pad0: [u8; 6],
 }
 
 #[repr(packed, C)]

@@ -1,6 +1,6 @@
-use rex11::display::window::{PropFormat, PropMode, WindowArguments, WindowValuesBuilder, EventMask, WindowValue, WindowClass, WindowKind, VisualClass};
-use rex11::display::proto::{Event, KeyEventKind};
-use rex11::display::{self, Atom};
+use yaxi::window::{PropFormat, PropMode, WindowArguments, WindowValuesBuilder, EventMask, WindowValue, WindowClass, WindowKind, VisualClass};
+use yaxi::proto::{Event, KeyEventKind};
+use yaxi::display::{self, Atom};
 
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -33,7 +33,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let atom = display.intern_atom("TEST2", false)?;
 
-    println!("id: {:?}, name: {:?}", atom.id(), atom.name());
+    println!("id: {:?}", atom.id());
 
     println!("property: {:?}", window.get_property(atom, Atom::CARDINAL, false)?);
 
@@ -55,7 +55,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             println!("window from id: {}, keycode: {}", window_copy.id(), keycode);
         },
+        _ => {},
     }
+
+    let pointer = window.query_pointer()?;
+
+    println!("pointer: {:?}", pointer);
 
     window.destroy(WindowKind::Window)?;
 

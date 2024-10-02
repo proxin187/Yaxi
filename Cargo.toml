@@ -1,6 +1,6 @@
 [package]
-name = "rex11"
-version = "0.1.0"
+name = "yaxi"
+version = "0.1.1"
 edition = "2021"
 
 description = "A rust implementation of the x11 protocol"
@@ -12,7 +12,7 @@ categories = ["api-bindings", "os", "graphics"]
 license = "MIT OR Apache-2.0"
 
 [lib]
-name = "rex11"
+name = "yaxi"
 path = "src/lib.rs"
 
 [[bin]]
