@@ -7,7 +7,7 @@
 
 ![GitHub License](https://img.shields.io/badge/license-MIT-red?style=for-the-badge&logo=none)
 ![dependencies](https://deps.rs/repo/github/proxin187/yaxi/status.svg?style=for-the-badge)
-[![Crates.io](https://img.shields.io/badge/yaxi-red?style=for-the-badge&logo=none)](https://crates.io/crates/yaxi)
+[![crates.io](https://img.shields.io/badge/crates.io-yaxi-red?style=for-the-badge&logo=none)](https://crates.io/crates/yaxi)
 
 <h4>yaxi is a x11 library written from scratch</h4>
 </div>
