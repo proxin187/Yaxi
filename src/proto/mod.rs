@@ -1,6 +1,7 @@
 use crate::display::request::*;
 use crate::display::error::Error;
 use crate::display::Atom;
+use crate::keyboard::Keysym;
 
 use std::sync::atomic::{Ordering, AtomicU16};
 use std::sync::{Arc, Mutex};
@@ -57,6 +58,7 @@ impl Opcode {
     pub const DELETE_PROPERTY: u8 = 19;
     pub const GET_PROPERTY: u8 = 20;
     pub const QUERY_POINTER: u8 = 38;
+    pub const GET_KEYBOARD_MAPPING: u8 = 101;
 }
 
 #[non_exhaustive]
@@ -90,6 +92,10 @@ pub enum Reply {
     GetProperty {
         value: Vec<u8>,
     },
+    GetKeyboardMapping {
+        keysyms: Vec<Keysym>,
+        keysyms_per_keycode: u8,
+    },
 }
 
 #[derive(Debug)]
@@ -98,6 +104,7 @@ pub enum ReplyKind {
     GetProperty,
     GetWindowAttributes,
     QueryPointer,
+    GetKeyboardMapping,
 }
 
 #[derive(Debug)]

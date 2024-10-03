@@ -72,6 +72,23 @@ pub enum Gravity {
 }
 
 #[derive(Clone, Copy)]
+pub enum KeyMask {
+    Shift = 0x0001,
+    Lock = 0x0002,
+    Control = 0x0004,
+    Mod1 = 0x0008,
+    Mod2 = 0x0010,
+    Mod3 = 0x0020,
+    Mod4 = 0x0040,
+    Mod5 = 0x0080,
+    Button1 = 0x0100,
+    Button2 = 0x0200,
+    Button3 = 0x0400,
+    Button4 = 0x0800,
+    Button5 = 0x1000,
+}
+
+#[derive(Clone, Copy)]
 pub enum EventMask {
     NoEvent = 0,
     KeyPress = 1,

@@ -465,6 +465,24 @@ pub struct QueryPointerResponse {
 }
 
 #[repr(packed, C)]
+#[derive(Debug, Clone)]
+pub struct GetKeyboardMapping {
+    pub opcode: u8,
+    pub pad0: u8,
+    pub length: u16,
+    pub first: u8,
+    pub count: u8,
+    pub pad1: [u8; 2],
+}
+
+#[repr(packed, C)]
+#[derive(Debug, Clone)]
+pub struct KeyboardMappingResponse {
+    pub length: u32,
+    pub pad0: [u8; 24],
+}
+
+#[repr(packed, C)]
 #[derive(Debug)]
 pub struct GrabKey {
     major_opcode: u8,

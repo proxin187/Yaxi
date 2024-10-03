@@ -22,6 +22,7 @@
 - [X] Authorization
 - [X] Requests and Replies
 - [X] events (most)
+- [X] Keycodes and Keysyms
 - [ ] Extensions (Xinerama, Xft, ...)
 - [ ] Comprehensive Documentation
 - [ ] Window Manager in yaxi (work in progress)

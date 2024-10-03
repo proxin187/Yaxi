@@ -5,6 +5,7 @@ pub enum Error {
     InvalidStatus,
     InvalidId,
     InvalidAtom,
+    InvalidKeysym,
     Authenthicate,
     RanOutOfXid,
     NoScreens,
@@ -38,6 +39,9 @@ impl std::fmt::Display for Error {
             },
             Error::InvalidAtom => {
                 f.write_str("invalid atom")
+            },
+            Error::InvalidKeysym => {
+                f.write_str("invalid keysym")
             },
             Error::Authenthicate => {
                 f.write_str("authenthication required")

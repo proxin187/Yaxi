@@ -5,6 +5,8 @@ pub(crate) mod xid;
 
 use crate::proto::*;
 use crate::window::*;
+use crate::keyboard::*;
+
 use request::*;
 use error::Error;
 
@@ -315,6 +317,32 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
         KeycodeRange::new(self.setup.min_keycode, self.setup.max_keycode)
     }
 
+    /// get the keyboard mapping from the server
+    pub fn get_keyboard_mapping(&mut self) -> Result<(Vec<Keysym>, u8), Box<dyn std::error::Error>> {
+        self.stream.send_encode(GetKeyboardMapping {
+            opcode: Opcode::GET_KEYBOARD_MAPPING,
+            pad0: 0,
+            length: 2,
+            first: self.setup.min_keycode,
+            count: self.setup.max_keycode - self.setup.min_keycode + 1,
+            pad1: [0u8; 2],
+        })?;
+
+        self.sequence.append(ReplyKind::GetKeyboardMapping)?;
+
+        match self.replies.wait()? {
+            Reply::GetKeyboardMapping { keysyms, keysyms_per_keycode } => Ok((keysyms, keysyms_per_keycode)),
+            _ => unreachable!(),
+        }
+    }
+
+    /// get the keysym from a keycode
+    pub fn keysym_from_keycode(&mut self, keycode: u8) -> Result<Keysym, Box<dyn std::error::Error>> {
+        let (keysyms, keysyms_per_keycode) = self.get_keyboard_mapping()?;
+
+        Ok(keysyms[(keycode - self.setup.min_keycode) as usize * keysyms_per_keycode as usize])
+    }
+
     fn endian(&self) -> u8 {
         cfg!(target_endian = "little")
             .then(|| 0x6c)
@@ -325,8 +353,6 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
         self.setup = self.stream.recv_decode()?;
 
         let vendor = self.stream.recv_str(self.setup.vendor_len as usize)?;
-
-        println!("vendor: {}", vendor);
 
         let bytes = self.stream.recv(std::mem::size_of::<PixmapFormat>() * self.setup.pixmap_formats_len as usize)?;
 
@@ -435,6 +461,18 @@ impl<T> EventListener<T> where T: Send + Sync + Read + Write + TryClone {
                 })?;
 
                 self.stream.recv(request::pad(response.value_len as usize))?;
+            },
+            ReplyKind::GetKeyboardMapping => {
+                let response: KeyboardMappingResponse = self.stream.recv_decode()?;
+
+                let bytes = self.stream.recv(4 * response.length as usize)?;
+
+                let keysyms = request::decode_slice::<u32>(&bytes, response.length as usize);
+
+                self.replies.push(Reply::GetKeyboardMapping {
+                    keysyms: keysyms.iter().map(|value| Keysym::new(*value)).collect::<Vec<Keysym>>(),
+                    keysyms_per_keycode: event.detail,
+                })?;
             },
         }
 

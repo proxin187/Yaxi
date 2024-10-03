@@ -2,6 +2,8 @@ use yaxi::window::{PropFormat, PropMode, WindowArguments, WindowValuesBuilder, E
 use yaxi::proto::{Event, KeyEventKind};
 use yaxi::display::{self, Atom};
 
+// NOTE: this is just a test bench for testing features
+
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut display = display::open_unix(0)?;
@@ -54,6 +56,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let mut window_copy = display.window_from_id(window)?;
 
             println!("window from id: {}, keycode: {}", window_copy.id(), keycode);
+
+            let keysym = display.keysym_from_keycode(keycode)?;
+
+            println!("keysym: {:?}", keysym);
+            println!("character: {:?}", keysym.character()?);
         },
         _ => {},
     }
