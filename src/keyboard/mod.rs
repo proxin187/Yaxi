@@ -3,9 +3,6 @@ use crate::display::error::Error;
 
 // page 86 @ https://www.x.org/docs/XProtocol/proto.pdf
 
-// All other standard KEYSYM values have zero values for bytes 1 and 2.
-// Byte 3 indicates a character code set,
-// and byte 4 indicates a particular character within that set.
 
 #[non_exhaustive]
 pub struct CharacterSet;
@@ -41,38 +38,6 @@ impl CharacterSet {
 pub enum Keycode {
     Any,
 }
-
-/*
-pub struct Keysym {
-    value: u32,
-    set: CharacterSet,
-}
-
-impl Keysym {
-    pub fn new(set: CharacterSet, code: u8) -> Keysym {
-        Keysym {
-            value: (code as u32) | ((set as u32) << 8),
-            set,
-        }
-    }
-
-    pub fn character(&self) -> Result<char, Box<dyn std::error::Error>> {
-        match self.set {
-            CharacterSet::Latin1 => {
-                // TODO: implement XGetKeyboardMapping
-                println!("byte 4: {}", self.value & 0b0000_0000_0000_0000_0000_0000_1111_1111);
-
-                let code = (self.value & 0xff00) * 256 + (self.value & 0xff);
-
-                println!("code: {:#x?}", code);
-
-                char::from_u32(code).ok_or(Box::new(Error::InvalidKeycode))
-            },
-            _ => todo!("character set not yet implemented"),
-        }
-    }
-}
-*/
 
 #[derive(Debug, Clone, Copy)]
 pub struct Keysym {
