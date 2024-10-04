@@ -282,6 +282,7 @@ pub enum PropMode {
     Append = 2,
 }
 
+#[derive(Clone)]
 pub struct Window<T: Send + Sync + Read + Write + TryClone> {
     stream: Stream<T>,
     replies: Queue<Reply>,

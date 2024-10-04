@@ -123,6 +123,7 @@ impl Sequence {
     }
 }
 
+#[derive(Clone)]
 pub struct Queue<T> {
     queue: Arc<Mutex<Vec<T>>>,
 }
