@@ -485,15 +485,15 @@ pub struct KeyboardMappingResponse {
 #[repr(packed, C)]
 #[derive(Debug)]
 pub struct GrabKey {
-    major_opcode: u8,
-    owner_events: u8,
-    length: u16,
-    grab_window: u32,
-    modifiers: u16,
-    key: u8,
-    pointer_mode: u8,
-    keyboard_mode: u8,
-    pad0: [u8; 3],
+    pub opcode: u8,
+    pub owner_events: u8,
+    pub length: u16,
+    pub grab_window: u32,
+    pub modifiers: u16,
+    pub key: u8,
+    pub pointer_mode: u8,
+    pub keyboard_mode: u8,
+    pub pad0: [u8; 3],
 }
 
 pub fn encode<T>(ptr: &T) -> &[u8] {

@@ -34,12 +34,7 @@ impl CharacterSet {
     pub const KEYBOARD: u8 = 255;
 }
 
-#[derive(Clone, Copy)]
-pub enum Keycode {
-    Any,
-}
-
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Keysym {
     value: u32,
 }
@@ -57,7 +52,7 @@ impl Keysym {
             CharacterSet::LATIN1 => {
                 char::from_u32((self.value & 0xff) + 0x20 - 32).ok_or(Box::new(Error::InvalidKeysym))
             },
-            _ => todo!("character set not yet implemented"),
+            _ => Err(Box::new(Error::InvalidKeysym)),
         }
     }
 }

@@ -343,6 +343,27 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
         Ok(keysyms[(keycode - self.setup.min_keycode) as usize * keysyms_per_keycode as usize])
     }
 
+    /// get the keysym from a character
+    pub fn keysym_from_character(&mut self, character: char) -> Result<Keysym, Box<dyn std::error::Error>> {
+        let (keysyms, _) = self.get_keyboard_mapping()?;
+
+        keysyms.iter()
+            .find(|keysym| keysym.character().map(|c| c == character).unwrap_or(false))
+            .map(|keysym| *keysym)
+            .ok_or(Box::new(Error::InvalidKeysym))
+    }
+
+    /// get the keycode from a keysym
+    pub fn keycode_from_keysym(&mut self, keysym: Keysym) -> Result<u8, Box<dyn std::error::Error>> {
+        let (keysyms, keysyms_per_keycode) = self.get_keyboard_mapping()?;
+
+        keysyms.iter()
+            .enumerate()
+            .find(|(_, x)| **x == keysym)
+            .map(|(index, _)| ((index / keysyms_per_keycode as usize) + self.setup.min_keycode as usize) as u8)
+            .ok_or(Box::new(Error::InvalidKeysym))
+    }
+
     fn endian(&self) -> u8 {
         cfg!(target_endian = "little")
             .then(|| 0x6c)

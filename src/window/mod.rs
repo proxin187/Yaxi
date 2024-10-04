@@ -89,6 +89,15 @@ pub enum KeyMask {
 }
 
 #[derive(Clone, Copy)]
+pub enum Mode {
+    Synchronous = 0,
+    Asynchronous = 1,
+}
+
+pub type PointerMode = Mode;
+pub type KeyboardMode = Mode;
+
+#[derive(Clone, Copy)]
 pub enum EventMask {
     NoEvent = 0,
     KeyPress = 1,
@@ -510,9 +519,31 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
         }
     }
 
-    /// grab some keys from the window,
+    /// grab a key from the window,
     /// buttons are not valid modifiers
-    pub fn grab_key(&mut self, modifier: Vec<KeyMask>, keycode: Keycode) {
+    pub fn grab_key(
+        &mut self,
+        modifiers: Vec<KeyMask>,
+        keycode: u8,
+        pointer_mode: PointerMode,
+        keyboard_mode: KeyboardMode,
+        owner_events: bool,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        self.stream.send_encode(GrabKey {
+            opcode: Opcode::GRAB_KEY,
+            owner_events: owner_events.then(|| 1).unwrap_or(0),
+            length: 4,
+            grab_window: self.id(),
+            modifiers: modifiers.iter().fold(0, |acc, modifier| acc | *modifier as u16),
+            key: keycode,
+            pointer_mode: pointer_mode as u8,
+            keyboard_mode: keyboard_mode as u8,
+            pad0: [0u8; 3],
+        })?;
+
+        self.sequence.skip();
+
+        Ok(())
     }
 }
 

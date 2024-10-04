@@ -61,6 +61,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             println!("keysym: {:?}", keysym);
             println!("character: {:?}", keysym.character()?);
+
+            let test1 = display.keycode_from_keysym(keysym)?;
+
+            println!("keycode: {:?}", test1);
+
+            let keysym = display.keysym_from_keycode(test1)?;
+
+            println!("keysym: {:?}", keysym);
+            println!("character: {:?}", keysym.character()?);
         },
         _ => {},
     }

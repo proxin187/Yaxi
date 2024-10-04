@@ -57,6 +57,7 @@ impl Opcode {
     pub const CHANGE_PROPERTY: u8 = 18;
     pub const DELETE_PROPERTY: u8 = 19;
     pub const GET_PROPERTY: u8 = 20;
+    pub const GRAB_KEY: u8 = 33;
     pub const QUERY_POINTER: u8 = 38;
     pub const GET_KEYBOARD_MAPPING: u8 = 101;
 }
