@@ -17,6 +17,7 @@
 * Clean Interface - yaxi provides a clean interface, making it perfect for both beginners and experienced developers
 * Safety - yaxi has safe interface for x11 unlike many other x11 libraries
 * Not A Wrapper - yaxi is a pure rust implementation and is NOT a wrapper
+* No Dependencies - yaxi doesnt depend on any crates
 
 ## Goals
 - [X] Authorization
@@ -32,8 +33,8 @@
 This example opens a window and waits for a keyboard press before it quits:
 
 ```rust
-use yaxi::window::{WindowArguments, WindowValuesBuilder, EventMask, WindowClass, WindowKind};
-use yaxi::proto::Event;
+use yaxi::window::{PropFormat, PropMode, WindowArguments, ValuesBuilder, WindowKind};
+use yaxi::proto::{Event, WindowClass, EventMask};
 use yaxi::display;
 
 
@@ -51,7 +52,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         border_width: 15,
         class: WindowClass::InputOutput,
         visual: root.visual(),
-        values: WindowValuesBuilder::new(&[]),
+        values: ValuesBuilder::new(vec![]),
     })?;
 
     window.select_input(&[EventMask::KeyPress, EventMask::KeyRelease])?;

@@ -53,6 +53,7 @@ impl Opcode {
     pub const MAP_SUBWINDOWS: u8 = 9;
     pub const UNMAP_WINDOW: u8 = 10;
     pub const UNMAP_SUBWINDOWS: u8 = 11;
+    pub const CONFIGURE_WINDOW: u8 = 12;
     pub const INTERN_ATOM: u8 = 16;
     pub const CHANGE_PROPERTY: u8 = 18;
     pub const DELETE_PROPERTY: u8 = 19;
@@ -83,6 +84,39 @@ impl ErrorCode {
     pub const NAME: u8 = 15;
     pub const LENGTH: u8 = 16;
     pub const IMPLEMENTATION: u8 = 17;
+}
+
+#[derive(Clone)]
+pub struct Queue<T> {
+    queue: Arc<Mutex<Vec<T>>>,
+}
+
+impl<T> Queue<T> {
+    pub fn new() -> Queue<T> {
+        Queue {
+            queue: Arc::new(Mutex::new(Vec::new())),
+        }
+    }
+
+    pub fn clone(&self) -> Queue<T> {
+        Queue {
+            queue: self.queue.clone(),
+        }
+    }
+
+    pub fn poll(&mut self) -> Result<bool, Box<dyn std::error::Error>> {
+        Ok(!lock!(self.queue)?.is_empty())
+    }
+
+    pub fn wait(&mut self) -> Result<T, Box<dyn std::error::Error>> {
+        while !self.poll()? {}
+
+        lock!(self.queue)?.pop().ok_or(Box::new(Error::NoReply))
+    }
+
+    pub fn push(&mut self, element: T) -> Result<(), Box<dyn std::error::Error>> {
+        lock!(self.queue).map(|mut lock| lock.push(element))
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -120,39 +154,6 @@ impl Sequence {
             id,
             kind,
         }
-    }
-}
-
-#[derive(Clone)]
-pub struct Queue<T> {
-    queue: Arc<Mutex<Vec<T>>>,
-}
-
-impl<T> Queue<T> {
-    pub fn new() -> Queue<T> {
-        Queue {
-            queue: Arc::new(Mutex::new(Vec::new())),
-        }
-    }
-
-    pub fn clone(&self) -> Queue<T> {
-        Queue {
-            queue: self.queue.clone(),
-        }
-    }
-
-    pub fn poll(&mut self) -> Result<bool, Box<dyn std::error::Error>> {
-        Ok(!lock!(self.queue)?.is_empty())
-    }
-
-    pub fn wait(&mut self) -> Result<T, Box<dyn std::error::Error>> {
-        while !self.poll()? {}
-
-        lock!(self.queue)?.pop().ok_or(Box::new(Error::NoReply))
-    }
-
-    pub fn push(&mut self, element: T) -> Result<(), Box<dyn std::error::Error>> {
-        lock!(self.queue).map(|mut lock| lock.push(element))
     }
 }
 
@@ -217,13 +218,13 @@ impl Coordinates {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum StackMode {
-    Above,
-    Below,
-    TopIf,
-    BottomIf,
-    Opposite,
+    Above = 0,
+    Below = 1,
+    TopIf = 2,
+    BottomIf = 3,
+    Opposite = 4,
 }
 
 impl From<u8> for StackMode {
@@ -253,6 +254,131 @@ impl From<u8> for Place {
             _ => unreachable!(),
         }
     }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum WindowClass {
+    CopyFromParent = 0,
+    InputOutput = 1,
+    InputOnly = 2,
+}
+
+impl From<u16> for WindowClass {
+    fn from(value: u16) -> WindowClass {
+        match value {
+            0 => WindowClass::CopyFromParent,
+            1 => WindowClass::InputOutput,
+            2 => WindowClass::InputOnly,
+            _ => unreachable!(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum VisualClass {
+    StaticGray = 0,
+    GrayScale = 1,
+    StaticColor = 2,
+    PsuedoColor = 3,
+    TrueColor = 4,
+    DirectColor = 5,
+}
+
+impl From<u8> for VisualClass {
+    fn from(value: u8) -> VisualClass {
+        match value {
+            0 => VisualClass::StaticGray,
+            1 => VisualClass::GrayScale,
+            2 => VisualClass::StaticColor,
+            3 => VisualClass::PsuedoColor,
+            4 => VisualClass::TrueColor,
+            5 => VisualClass::DirectColor,
+            _ => unreachable!(),
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+pub enum BackingStore {
+    NotUseful = 0,
+    WhenMapped = 1,
+    Always = 2,
+}
+
+#[derive(Clone, Copy)]
+pub enum Gravity {
+    Forget = 0,
+    NorthWest = 1,
+    North = 2,
+    NorthEast = 3,
+    West = 4,
+    Center = 5,
+    East = 6,
+    SouthWest = 7,
+    South = 8,
+    SouthEast = 9,
+    Static = 10,
+}
+
+#[derive(Clone, Copy)]
+pub enum KeyMask {
+    Shift = 0x0001,
+    Lock = 0x0002,
+    Control = 0x0004,
+    Mod1 = 0x0008,
+    Mod2 = 0x0010,
+    Mod3 = 0x0020,
+    Mod4 = 0x0040,
+    Mod5 = 0x0080,
+    Button1 = 0x0100,
+    Button2 = 0x0200,
+    Button3 = 0x0400,
+    Button4 = 0x0800,
+    Button5 = 0x1000,
+}
+
+#[derive(Clone, Copy)]
+pub enum Mode {
+    Synchronous = 0,
+    Asynchronous = 1,
+}
+
+pub type PointerMode = Mode;
+pub type KeyboardMode = Mode;
+
+#[derive(Clone, Copy)]
+pub enum EventMask {
+    NoEvent = 0,
+    KeyPress = 1,
+    KeyRelease = 2,
+    ButtonPress = 4,
+    ButtonRelease = 8,
+    EnterWindow = 16,
+    LeaveWindow = 32,
+    PointerMotion = 64,
+    PointerMotionHint = 128,
+    Button1Motion = 256,
+    Button2Motion = 512,
+    Button3Motion = 1024,
+    Button4Motion = 2048,
+    Button5Motion = 4096,
+    ButtonMotion = 8192,
+    KeymapState = 16384,
+    Exposure = 32768,
+    VisibilityChange = 65536,
+    StructureNotify = 131072,
+    ResizeRedirect = 262144,
+    SubstructureNotify = 524288,
+    SubstructureRedirect = 1048576,
+    FocusChange = 2097152,
+    PropertyChange = 4194304,
+    ColorMapChange = 8388608,
+    OwnerGrabButton = 16777216,
+}
+
+// TODO: add cursors
+#[derive(Clone, Copy)]
+pub enum Cursor {
 }
 
 #[derive(Debug)]

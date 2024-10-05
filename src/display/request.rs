@@ -496,6 +496,17 @@ pub struct GrabKey {
     pub pad0: [u8; 3],
 }
 
+#[repr(packed, C)]
+#[derive(Debug)]
+pub struct ConfigureWindow {
+    pub opcode: u8,
+    pub pad0: u8,
+    pub length: u16,
+    pub wid: u32,
+    pub mask: u16,
+    pub pad1: u16,
+}
+
 pub fn encode<T>(ptr: &T) -> &[u8] {
     unsafe {
         slice::from_raw_parts((ptr as *const T) as *const u8, mem::size_of::<T>())

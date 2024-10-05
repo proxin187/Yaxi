@@ -1,136 +1,89 @@
 use crate::display::request::{self, *};
 use crate::display::{Atom, Visual, Roots, Stream, TryClone};
 use crate::display::xid;
-use crate::keyboard::*;
 use crate::proto::*;
 
 use std::io::{Read, Write};
 
 
-#[derive(Debug, Clone, Copy)]
-pub enum WindowClass {
-    CopyFromParent = 0,
-    InputOutput = 1,
-    InputOnly = 2,
+/// a builder for a list of values known as `LISTofVALUE` in proto.pdf
+pub struct ValuesBuilder<T: ValueMask> {
+    values: Vec<T>,
+    request: Vec<u8>,
+    mask: u32,
 }
 
-impl From<u16> for WindowClass {
-    fn from(value: u16) -> WindowClass {
-        match value {
-            0 => WindowClass::CopyFromParent,
-            1 => WindowClass::InputOutput,
-            2 => WindowClass::InputOnly,
-            _ => unreachable!(),
+impl<T> ValuesBuilder<T> where T: ValueMask {
+
+    /// create a new values builder with specified values
+    pub fn new(values: Vec<T>) -> ValuesBuilder<T> {
+        ValuesBuilder {
+            values,
+            request: Vec::new(),
+            mask: 0,
+        }
+    }
+
+    pub(crate) fn len(&self) -> u16 { self.values.len() as u16 }
+
+    pub(crate) fn build(&mut self) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+        self.values.sort_by(|a, b| a.mask().partial_cmp(&b.mask()).unwrap());
+
+        for value in &self.values {
+            self.mask |= value.mask();
+
+            self.request.extend(value.encode());
+        }
+
+        Ok(self.request.clone())
+    }
+}
+
+pub trait ValueMask {
+    fn mask(&self) -> u32;
+
+    fn encode(&self) -> Vec<u8>;
+}
+
+/// representing value in a configure window request
+pub enum ConfigureValue<T: Send + Sync + Read + Write + TryClone> {
+    X(u16),
+    Y(u16),
+    Width(u16),
+    Height(u16),
+    Border(u16),
+    Sibling(Window<T>),
+    StackMode(StackMode),
+}
+
+impl<T> ValueMask for ConfigureValue<T> where T: Send + Sync + Read + Write + TryClone {
+    fn mask(&self) -> u32 {
+        match self {
+            ConfigureValue::X(_) => 0x1,
+            ConfigureValue::Y(_) => 0x2,
+            ConfigureValue::Width(_) => 0x4,
+            ConfigureValue::Height(_) => 0x8,
+            ConfigureValue::Border(_) => 0x10,
+            ConfigureValue::Sibling(_) => 0x20,
+            ConfigureValue::StackMode(_) => 0x20,
+        }
+    }
+
+    fn encode(&self) -> Vec<u8> {
+        match self {
+            ConfigureValue::X(value)
+                | ConfigureValue::Y(value)
+                | ConfigureValue::Width(value)
+                | ConfigureValue::Height(value)
+                | ConfigureValue::Border(value) => request::encode(value).to_vec(),
+
+            ConfigureValue::Sibling(window) => request::encode(&window.id()).to_vec(),
+
+            ConfigureValue::StackMode(stack_mode) => vec![*stack_mode as u8],
         }
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-pub enum VisualClass {
-    StaticGray = 0,
-    GrayScale = 1,
-    StaticColor = 2,
-    PsuedoColor = 3,
-    TrueColor = 4,
-    DirectColor = 5,
-}
-
-impl From<u8> for VisualClass {
-    fn from(value: u8) -> VisualClass {
-        match value {
-            0 => VisualClass::StaticGray,
-            1 => VisualClass::GrayScale,
-            2 => VisualClass::StaticColor,
-            3 => VisualClass::PsuedoColor,
-            4 => VisualClass::TrueColor,
-            5 => VisualClass::DirectColor,
-            _ => unreachable!(),
-        }
-    }
-}
-
-#[derive(Clone, Copy)]
-pub enum BackingStore {
-    NotUseful = 0,
-    WhenMapped = 1,
-    Always = 2,
-}
-
-#[derive(Clone, Copy)]
-pub enum Gravity {
-    Forget = 0,
-    NorthWest = 1,
-    North = 2,
-    NorthEast = 3,
-    West = 4,
-    Center = 5,
-    East = 6,
-    SouthWest = 7,
-    South = 8,
-    SouthEast = 9,
-    Static = 10,
-}
-
-#[derive(Clone, Copy)]
-pub enum KeyMask {
-    Shift = 0x0001,
-    Lock = 0x0002,
-    Control = 0x0004,
-    Mod1 = 0x0008,
-    Mod2 = 0x0010,
-    Mod3 = 0x0020,
-    Mod4 = 0x0040,
-    Mod5 = 0x0080,
-    Button1 = 0x0100,
-    Button2 = 0x0200,
-    Button3 = 0x0400,
-    Button4 = 0x0800,
-    Button5 = 0x1000,
-}
-
-#[derive(Clone, Copy)]
-pub enum Mode {
-    Synchronous = 0,
-    Asynchronous = 1,
-}
-
-pub type PointerMode = Mode;
-pub type KeyboardMode = Mode;
-
-#[derive(Clone, Copy)]
-pub enum EventMask {
-    NoEvent = 0,
-    KeyPress = 1,
-    KeyRelease = 2,
-    ButtonPress = 4,
-    ButtonRelease = 8,
-    EnterWindow = 16,
-    LeaveWindow = 32,
-    PointerMotion = 64,
-    PointerMotionHint = 128,
-    Button1Motion = 256,
-    Button2Motion = 512,
-    Button3Motion = 1024,
-    Button4Motion = 2048,
-    Button5Motion = 4096,
-    ButtonMotion = 8192,
-    KeymapState = 16384,
-    Exposure = 32768,
-    VisibilityChange = 65536,
-    StructureNotify = 131072,
-    ResizeRedirect = 262144,
-    SubstructureNotify = 524288,
-    SubstructureRedirect = 1048576,
-    FocusChange = 2097152,
-    PropertyChange = 4194304,
-    ColorMapChange = 8388608,
-    OwnerGrabButton = 16777216,
-}
-
-// TODO: add cursors
-#[derive(Clone)]
-pub enum Cursor {
-}
 
 #[derive(Clone)]
 pub enum WindowValue {
@@ -152,7 +105,15 @@ pub enum WindowValue {
 }
 
 impl WindowValue {
-    pub fn mask(&self) -> u32 {
+    fn mask(&self, masks: &[EventMask]) -> u32 {
+        masks.iter()
+            .map(|event_mask| *event_mask as u32)
+            .fold(0, |acc, x| acc | x)
+    }
+}
+
+impl ValueMask for WindowValue {
+    fn mask(&self) -> u32 {
         match self {
             WindowValue::BgPixmap(_) => 0x00000001,
             WindowValue::BgPixel(_) => 0x00000002,
@@ -171,65 +132,30 @@ impl WindowValue {
             WindowValue::Cursor(_) => 0x00004000,
         }
     }
-}
 
-pub struct WindowValuesBuilder {
-    values: Vec<WindowValue>,
-    request: Vec<u8>,
-    value_mask: u32,
-}
-
-impl WindowValuesBuilder {
-    pub fn new(values: &[WindowValue]) -> WindowValuesBuilder {
-        WindowValuesBuilder {
-            values: values.to_vec(),
-            request: Vec::new(),
-            value_mask: 0,
-        }
-    }
-
-    fn len(&self) -> u16 { self.values.len() as u16 }
-
-    fn mask(&self, masks: Vec<EventMask>) -> u32 {
-        masks.iter()
-            .map(|event_mask| *event_mask as u32)
-            .fold(0, |acc, x| acc | x)
-    }
-
-    fn insert_value(&mut self, value: WindowValue) {
-        self.value_mask |= value.mask();
-
-        match value {
+    fn encode(&self) -> Vec<u8> {
+        match self {
             WindowValue::BgPixmap(value)
                 | WindowValue::BgPixel(value)
                 | WindowValue::BorderPixmap(value)
                 | WindowValue::BorderPixel(value)
                 | WindowValue::BackingPlane(value)
                 | WindowValue::BackingPixel(value)
-                | WindowValue::Colormap(value) => self.request.extend(request::encode(&value)),
+                | WindowValue::Colormap(value) => request::encode(&value).to_vec(),
 
             WindowValue::BitGravity(gravity)
-                | WindowValue::WinGravity(gravity) => self.request.extend(request::encode(&(gravity as u32))),
+                | WindowValue::WinGravity(gravity) => request::encode(&(*gravity as u32)).to_vec(),
 
             WindowValue::OverrideRedirect(value)
-                | WindowValue::SaveUnder(value) => self.request.extend(request::encode(&(value as u8))),
+                | WindowValue::SaveUnder(value) => request::encode(&(*value as u8)).to_vec(),
 
             WindowValue::EventMask(masks)
-                | WindowValue::DoNotPropogateMask(masks)=> self.request.extend(request::encode(&self.mask(masks))),
+                | WindowValue::DoNotPropogateMask(masks)=> request::encode(&self.mask(masks)).to_vec(),
 
-            WindowValue::Cursor(cursor) => self.request.extend(request::encode(&(cursor as u32))),
-            WindowValue::BackingStore(store) => self.request.extend(request::encode(&(store as u32))),
+            WindowValue::Cursor(cursor) => request::encode(&(*cursor as u32)).to_vec(),
+
+            WindowValue::BackingStore(store) => request::encode(&(*store as u32)).to_vec(),
         }
-    }
-
-    pub fn build(&mut self) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-        self.values.sort_by(|a, b| a.mask().partial_cmp(&b.mask()).unwrap());
-
-        for value in self.values.clone() {
-            self.insert_value(value);
-        }
-
-        Ok(self.request.clone())
     }
 }
 
@@ -242,7 +168,7 @@ pub struct WindowArguments {
     pub border_width: u16,
     pub class: WindowClass,
     pub visual: Visual,
-    pub values: WindowValuesBuilder,
+    pub values: ValuesBuilder<WindowValue>,
 }
 
 pub enum WindowKind {
@@ -377,7 +303,7 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
             border_width: window.border_width,
             class: window.class as u16,
             visual: window.visual.id,
-            value_mask: window.values.value_mask,
+            value_mask: window.values.mask,
         })?;
 
         self.stream.send(&window_values_request)?;
@@ -388,7 +314,7 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
     }
 
     /// change the attributes of a window
-    pub fn change_attributes(&mut self, mut values: WindowValuesBuilder) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn change_attributes(&mut self, mut values: ValuesBuilder<WindowValue>) -> Result<(), Box<dyn std::error::Error>> {
         let request = values.build()?;
 
         self.stream.send_encode(ChangeWindowAttributes {
@@ -396,7 +322,7 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
             pad0: 0,
             length: values.len() + 3,
             wid: self.id(),
-            mask: values.value_mask,
+            mask: values.mask,
         })?;
 
         self.stream.send(&request)?;
@@ -406,9 +332,39 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
         Ok(())
     }
 
+    /// configure the window
+    pub fn configure(&mut self, mut values: ValuesBuilder<ConfigureValue<T>>) -> Result<(), Box<dyn std::error::Error>> {
+        let request = values.build()?;
+
+        self.stream.send_encode(ConfigureWindow {
+            opcode: Opcode::CONFIGURE_WINDOW,
+            pad0: 0,
+            length: values.len() + 3,
+            wid: self.id(),
+            mask: values.mask as u16,
+            pad1: 0,
+        })?;
+
+        self.stream.send(&request)?;
+
+        self.sequence.skip();
+
+        Ok(())
+    }
+
+    /// move a window, this is a fancy wrapper for configure
+    pub fn mov(&mut self, x: u16, y: u16) -> Result<(), Box<dyn std::error::Error>> {
+        self.configure(ValuesBuilder::new(vec![ConfigureValue::X(x), ConfigureValue::Y(y)]))
+    }
+
+    /// resize a window, this is a fancy wrapper for configure
+    pub fn resize(&mut self, width: u16, height: u16) -> Result<(), Box<dyn std::error::Error>> {
+        self.configure(ValuesBuilder::new(vec![ConfigureValue::Width(width), ConfigureValue::Height(height)]))
+    }
+
     /// choose the events you want to recieve
     pub fn select_input(&mut self, events: &[EventMask]) -> Result<(), Box<dyn std::error::Error>> {
-        self.change_attributes(WindowValuesBuilder::new(&[WindowValue::EventMask(events.to_vec())]))
+        self.change_attributes(ValuesBuilder::new(vec![WindowValue::EventMask(events.to_vec())]))
     }
 
     /// become the child of a parent window

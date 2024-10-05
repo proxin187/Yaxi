@@ -1,5 +1,5 @@
-use yaxi::window::{PropFormat, PropMode, WindowArguments, WindowValuesBuilder, EventMask, WindowValue, WindowClass, WindowKind, VisualClass};
-use yaxi::proto::{Event, KeyEventKind};
+use yaxi::window::{PropFormat, PropMode, WindowArguments, ValuesBuilder, WindowKind};
+use yaxi::proto::{Event, WindowClass, EventMask};
 use yaxi::display::{self, Atom};
 
 // NOTE: this is just a test bench for testing features
@@ -22,7 +22,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         border_width: 15,
         class: WindowClass::InputOutput,
         visual: root.visual(),
-        values: WindowValuesBuilder::new(&[]),
+        values: ValuesBuilder::new(vec![]),
     })?;
 
     /*

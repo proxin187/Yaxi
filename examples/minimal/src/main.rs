@@ -1,5 +1,5 @@
-use yaxi::window::{WindowArguments, WindowValuesBuilder, EventMask, WindowClass, WindowKind};
-use yaxi::proto::Event;
+use yaxi::window::{PropFormat, PropMode, WindowArguments, ValuesBuilder, WindowKind};
+use yaxi::proto::{Event, WindowClass, EventMask};
 use yaxi::display;
 
 
@@ -17,7 +17,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         border_width: 15,
         class: WindowClass::InputOutput,
         visual: root.visual(),
-        values: WindowValuesBuilder::new(&[]),
+        values: ValuesBuilder::new(vec![]),
     })?;
 
     window.select_input(&[EventMask::KeyPress, EventMask::KeyRelease])?;
