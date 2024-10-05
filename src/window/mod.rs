@@ -362,6 +362,13 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
         self.configure(ValuesBuilder::new(vec![ConfigureValue::Width(width), ConfigureValue::Height(height)]))
     }
 
+    /// move and resize a window, this is a fancy wrapper for configure
+    pub fn mov_resize(&mut self, x: u16, y: u16, width: u16, height: u16) -> Result<(), Box<dyn std::error::Error>> {
+        self.mov(x, y)?;
+
+        self.resize(width, height)
+    }
+
     /// choose the events you want to recieve
     pub fn select_input(&mut self, events: &[EventMask]) -> Result<(), Box<dyn std::error::Error>> {
         self.change_attributes(ValuesBuilder::new(vec![WindowValue::EventMask(events.to_vec())]))
