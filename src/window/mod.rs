@@ -313,6 +313,20 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
         Ok(Window::new(self.stream.try_clone()?, self.replies.clone(), self.sequence.clone(), window.visual, window.depth, wid))
     }
 
+    /// kill the window
+    pub fn kill(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        self.stream.send_encode(KillClient {
+            opcode: Opcode::KILL_CLIENT,
+            pad0: 0,
+            length: 2,
+            resource: self.id(),
+        })?;
+
+        self.sequence.skip();
+
+        Ok(())
+    }
+
     /// change the attributes of a window
     pub fn change_attributes(&mut self, mut values: ValuesBuilder<WindowValue>) -> Result<(), Box<dyn std::error::Error>> {
         let request = values.build()?;

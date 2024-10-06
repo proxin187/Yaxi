@@ -61,6 +61,7 @@ impl Opcode {
     pub const GRAB_KEY: u8 = 33;
     pub const QUERY_POINTER: u8 = 38;
     pub const GET_KEYBOARD_MAPPING: u8 = 101;
+    pub const KILL_CLIENT: u8 = 112;
 }
 
 #[non_exhaustive]
