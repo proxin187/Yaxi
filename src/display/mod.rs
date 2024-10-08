@@ -122,20 +122,43 @@ impl<T> Stream<T> where T: Send + Sync + Read + Write + TryClone {
     }
 }
 
+/// an atom in the x11 protocol is an integer representing a string
+/// atoms in the range 1..=68 are predefined (only 1..=20 implemented so far)
 #[derive(Debug, Clone, Copy)]
 pub struct Atom {
     id: u32,
 }
 
 impl Atom {
+    pub const PRIMARY: Atom = Atom::new(1);
+    pub const SECONDARY: Atom = Atom::new(2);
+    pub const ARC: Atom = Atom::new(3);
+    pub const ATOM: Atom = Atom::new(4);
+    pub const BITMAP: Atom = Atom::new(5);
     pub const CARDINAL: Atom = Atom::new(6);
+    pub const COLORMAP: Atom = Atom::new(7);
+    pub const CURSOR: Atom = Atom::new(8);
+    pub const CUT_BUFFER0: Atom = Atom::new(9);
+    pub const CUT_BUFFER1: Atom = Atom::new(10);
+    pub const CUT_BUFFER2: Atom = Atom::new(11);
+    pub const CUT_BUFFER3: Atom = Atom::new(12);
+    pub const CUT_BUFFER4: Atom = Atom::new(13);
+    pub const CUT_BUFFER5: Atom = Atom::new(14);
+    pub const CUT_BUFFER6: Atom = Atom::new(15);
+    pub const CUT_BUFFER7: Atom = Atom::new(16);
+    pub const DRAWABLE: Atom = Atom::new(17);
+    pub const FONT: Atom = Atom::new(18);
+    pub const INTEGER: Atom = Atom::new(19);
+    pub const PIXMAP: Atom = Atom::new(20);
 
+    /// create a new atom from its id
     pub const fn new(id: u32) -> Atom {
         Atom {
             id,
         }
     }
 
+    /// get the id of the atom
     pub fn id(&self) -> u32 { self.id }
 }
 
