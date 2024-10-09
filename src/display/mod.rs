@@ -310,6 +310,22 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
         Ok(Window::<T>::new(stream, self.replies.clone(), self.sequence.clone(), self.roots.visual_from_id(screen.response.root_visual)?, screen.response.root_depth, screen.response.root))
     }
 
+    /// this request returns the current focused window
+    pub fn get_input_focus(&mut self) -> Result<GetInputFocusResponse, Box<dyn std::error::Error>> {
+        self.stream.send_encode(GetInputFocus {
+            opcode: Opcode::GET_INPUT_FOCUS,
+            pad0: 0,
+            length: 1,
+        })?;
+
+        self.sequence.append(ReplyKind::GetInputFocus)?;
+
+        match self.replies.wait()? {
+            Reply::GetInputFocus(response) => Ok(response),
+            _ => unreachable!(),
+        }
+    }
+
     /// get an atom from its name
     pub fn intern_atom<'a>(&mut self, name: &'a str, only_if_exists: bool) -> Result<Atom, Box<dyn std::error::Error>> {
         let request = InternAtom {
@@ -496,6 +512,11 @@ impl<T> EventListener<T> where T: Send + Sync + Read + Write + TryClone {
                 let response: QueryPointerResponse = self.stream.recv_decode()?;
 
                 self.replies.push(Reply::QueryPointer(response))?;
+            },
+            ReplyKind::GetInputFocus => {
+                let response: GetInputFocusResponse = self.stream.recv_decode()?;
+
+                self.replies.push(Reply::GetInputFocus(response))?;
             },
             ReplyKind::GetProperty => {
                 let response: GetPropertyResponse = self.stream.recv_decode()?;

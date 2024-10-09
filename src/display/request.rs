@@ -516,6 +516,22 @@ pub struct KillClient {
     pub resource: u32,
 }
 
+#[repr(packed, C)]
+#[derive(Debug)]
+pub struct GetInputFocus {
+    pub opcode: u8,
+    pub pad0: u8,
+    pub length: u32,
+}
+
+#[repr(packed, C)]
+#[derive(Debug, Clone)]
+pub struct GetInputFocusResponse {
+    pub(crate) length: u32,
+    pub window: u32,
+    pub(crate) pad0: [u8; 20],
+}
+
 pub fn encode<T>(ptr: &T) -> &[u8] {
     unsafe {
         slice::from_raw_parts((ptr as *const T) as *const u8, mem::size_of::<T>())

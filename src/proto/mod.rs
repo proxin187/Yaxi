@@ -60,6 +60,7 @@ impl Opcode {
     pub const GET_PROPERTY: u8 = 20;
     pub const GRAB_KEY: u8 = 33;
     pub const QUERY_POINTER: u8 = 38;
+    pub const GET_INPUT_FOCUS: u8 = 43;
     pub const GET_KEYBOARD_MAPPING: u8 = 101;
     pub const KILL_CLIENT: u8 = 112;
 }
@@ -125,6 +126,7 @@ pub enum Reply {
     InternAtom(InternAtomResponse),
     GetWindowAttributes(GetWindowAttributesResponse),
     QueryPointer(QueryPointerResponse),
+    GetInputFocus(GetInputFocusResponse),
     GetProperty {
         value: Vec<u8>,
     },
@@ -141,6 +143,7 @@ pub enum ReplyKind {
     GetWindowAttributes,
     QueryPointer,
     GetKeyboardMapping,
+    GetInputFocus,
 }
 
 #[derive(Debug)]
