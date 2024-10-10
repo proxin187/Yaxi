@@ -547,6 +547,61 @@ impl<T> EventListener<T> where T: Send + Sync + Read + Write + TryClone {
     fn handle_event(&mut self, generic: GenericEvent) -> Result<(), Box<dyn std::error::Error>> {
         match generic.opcode & 0b0111111 {
             Response::ERROR => {
+                // TODO: The errors are most likely caused by us not implementing all events
+                // we need to implement ALL events in order to continue development.
+                //
+                // it doesnt print anything in the wildcard match case
+                //
+                // looks like something is wrong with either CreateNotify or MapRequest
+                //
+                // TODO: the problem is that all of our event structures does not have the right
+                // padding
+
+/*
+0.00: Client (pid 1617608 yaxum) -->   48 bytes                       	
+	         byte-order: LSB first
+	      major-version: 000b
+	      minor-version: 0000
+	authorization-protocol-name: "MIT-MAGIC-COOKIE-1"           (pid 16088
+	authorization-protocol-data: "\364X\326[`\274\322W)\332\357|\231h\302#"
+ 0.00: 					3668 bytes <-- X11 Server (pid 1617307 Xephyr)
+					protocol-major-version: 000b   	
+					protocol-minor-version: 0000   	
+					     release-number: 00b8a595
+					   resource-id-base: 00200000
+					   resource-id-mask: 001fffff
+					 motion-buffer-size: 00000100
+					   image-byte-order: LSB first
+					bitmap-format-bit-order: LSB first
+					bitmap-format-scanline-unit: 20
+					bitmap-format-scanline-pad: 20
+					        min-keycode: 8 (^H)
+					        max-keycode: 255 (\377)
+					             vendor: "The X.Org Foundation"
+					     pixmap-formats: (7)
+					              roots: (1)
+ 0.00: Client (pid 1617608 yaxum) -->   16 bytes
+	............REQUEST: ChangeWindowAttributes
+	             window: WIN 00000210
+	         value-mask: event-mask
+	         value-list:
+		         event-mask: SubstructureNotify | SubstructureRedirect
+77.38: 					 32 bytes <-- X11 Server (pid 1617307 Xephyr)
+					..............EVENT: CreateNotify
+					             parent: WIN 00000210
+					             window: WIN 0060000a
+					                  x: 0
+					                  y: 0
+					              width: 00a4
+					             height: 00a4
+					       border-width: 0001
+					  override-redirect: False
+77.38: 					 32 bytes <-- X11 Server (pid 1617307 Xephyr)
+					..............EVENT: MapRequest
+					             parent: WIN 00000210
+					             window: WIN 0060000a
+*/
+
                 let error: ErrorEvent = self.stream.recv_decode()?;
 
                 println!("error: {:?}", error);
@@ -728,6 +783,10 @@ impl<T> EventListener<T> where T: Send + Sync + Read + Write + TryClone {
                 })
             },
             Response::CLIENT_MESSAGE => {
+                // TODO: there we are reading the wrong event here, but this does not seem to be
+                // the cause of the problem
+                println!("CLIENT MESSAGE?\n\n\n\n\nTEST");
+
                 let event: CircReq = self.stream.recv_decode()?;
 
                 self.events.push(Event::CirculateRequest {

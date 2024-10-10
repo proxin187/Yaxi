@@ -174,6 +174,8 @@ pub struct ConfigNotify {
     pub pad1: u8,
 }
 
+// TODO: the padding on most of these requests are most likely wrong, fix them all
+
 #[repr(packed, C)]
 #[derive(Debug)]
 pub struct CreateNotify {
@@ -185,7 +187,7 @@ pub struct CreateNotify {
     pub height: u16,
     pub border_width: u16,
     pub override_redirect: u8,
-    pub pad1: u8,
+    pub pad1: [u8; 9],
 }
 
 #[repr(packed, C)]
@@ -255,6 +257,7 @@ pub struct ConfigReq {
 pub struct MapReq {
     pub parent: u32,
     pub window: u32,
+    pub pad0: [u8; 20],
 }
 
 // TODO: IMPLEMENT CLIENT MESSAGE
