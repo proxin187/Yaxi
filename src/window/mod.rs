@@ -208,7 +208,6 @@ pub enum PropMode {
     Append = 2,
 }
 
-#[derive(Clone)]
 pub struct Window<T: Send + Sync + Read + Write + TryClone> {
     stream: Stream<T>,
     replies: Queue<Reply>,
@@ -216,6 +215,19 @@ pub struct Window<T: Send + Sync + Read + Write + TryClone> {
     visual: Visual,
     depth: u8,
     id: u32,
+}
+
+impl<T> TryClone for Window<T> where T: Send + Sync + Read + Write + TryClone {
+    fn try_clone(&self) -> Result<Box<Self>, Box<dyn std::error::Error>> {
+        Ok(Box::new(Window {
+            stream: self.stream.try_clone()?,
+            replies: self.replies.clone(),
+            sequence: self.sequence.clone(),
+            visual: self.visual.clone(),
+            depth: self.depth,
+            id: self.id,
+        }))
+    }
 }
 
 impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
