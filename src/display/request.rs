@@ -154,9 +154,9 @@ pub struct KeyEvent {
 pub struct CircNotify {
     pub event: u32,
     pub window: u32,
-    pub pad1: [u8; 4],
+    pub unused: u32,
     pub place: u8,
-    pub pad2: [u8; 3],
+    pub pad0: [u8; 15],
 }
 
 #[repr(packed, C)]
@@ -171,10 +171,8 @@ pub struct ConfigNotify {
     pub height: u16,
     pub border_width: u16,
     pub override_redirect: u8,
-    pub pad1: u8,
+    pub pad0: [u8; 5],
 }
-
-// TODO: the padding on most of these requests are most likely wrong, fix them all
 
 #[repr(packed, C)]
 #[derive(Debug)]
@@ -187,7 +185,7 @@ pub struct CreateNotify {
     pub height: u16,
     pub border_width: u16,
     pub override_redirect: u8,
-    pub pad1: [u8; 9],
+    pub pad0: [u8; 9],
 }
 
 #[repr(packed, C)]
@@ -195,6 +193,7 @@ pub struct CreateNotify {
 pub struct DestroyNotify {
     pub event: u32,
     pub window: u32,
+    pub pad0: [u8; 20],
 }
 
 #[repr(packed, C)]
@@ -204,6 +203,7 @@ pub struct GravityNotify {
     pub window: u32,
     pub x: u16,
     pub y: u16,
+    pub pad0: [u8; 16],
 }
 
 #[repr(packed, C)]
@@ -212,7 +212,7 @@ pub struct MapNotify {
     pub event: u32,
     pub window: u32,
     pub override_redirect: u8,
-    pub pad1: [u8; 3],
+    pub pad0: [u8; 19],
 }
 
 #[repr(packed, C)]
@@ -224,7 +224,7 @@ pub struct ReparentNotify {
     pub x: u16,
     pub y: u16,
     pub override_redirect: u8,
-    pub pad1: [u8; 3],
+    pub pad0: [u8; 11],
 }
 
 #[repr(packed, C)]
@@ -233,7 +233,7 @@ pub struct UnmapNotify {
     pub event: u32,
     pub window: u32,
     pub from_configure: u8,
-    pub pad1: [u8; 3],
+    pub pad0: [u8; 19],
 }
 
 pub type CircReq = CircNotify;
@@ -250,6 +250,7 @@ pub struct ConfigReq {
     pub height: u16,
     pub border_width: u16,
     pub value_mask: u16,
+    pub pad0: [u8; 4],
 }
 
 #[repr(packed, C)]
@@ -265,7 +266,7 @@ pub struct MapReq {
 #[repr(packed, C)]
 #[derive(Debug)]
 pub struct ClientMessage {
-    pub parent: u32,
+    pub window: u32,
     pub type_: u32,
     pub data: [u8; 20],
 }
@@ -303,11 +304,12 @@ pub struct SelectionNotify {
 #[derive(Debug)]
 pub struct SelectionReq {
     pub time: u32,
+    pub owner: u32,
     pub requestor: u32,
     pub selection: u32,
     pub target: u32,
     pub property: u32,
-    pub pad0: [u8; 8],
+    pub pad0: [u8; 4],
 }
 
 #[repr(packed, C)]
