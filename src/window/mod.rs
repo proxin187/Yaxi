@@ -71,7 +71,6 @@ impl<T> ValueMask for ConfigureValue<T> where T: Send + Sync + Read + Write + Tr
         }
     }
 
-    // TODO: we need to hardcode this to a 4 byte size aka u32
     fn encode(&self) -> Vec<u8> {
         match self {
             ConfigureValue::X(value)
@@ -335,6 +334,23 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
             pad0: 0,
             length: 2,
             resource: self.id(),
+        })?;
+
+        self.sequence.skip();
+
+        Ok(())
+    }
+
+    /// sets the current input focus to the window
+    pub fn set_input_focus(&mut self, revert_to: RevertTo) -> Result<(), Box<dyn std::error::Error>> {
+        // TODO: un-hardcode time as current time
+
+        self.stream.send_encode(SetInputFocus {
+            opcode: Opcode::SET_INPUT_FOCUS,
+            revert_to: revert_to as u8,
+            length: 3,
+            focus: self.id(),
+            time: 0,
         })?;
 
         self.sequence.skip();

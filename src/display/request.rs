@@ -523,10 +523,20 @@ pub struct KillClient {
 
 #[repr(packed, C)]
 #[derive(Debug)]
+pub struct SetInputFocus {
+    pub opcode: u8,
+    pub revert_to: u8,
+    pub length: u16,
+    pub focus: u32,
+    pub time: u32,
+}
+
+#[repr(packed, C)]
+#[derive(Debug)]
 pub struct GetInputFocus {
     pub opcode: u8,
     pub pad0: u8,
-    pub length: u32,
+    pub length: u16,
 }
 
 #[repr(packed, C)]

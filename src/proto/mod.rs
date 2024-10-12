@@ -60,6 +60,7 @@ impl Opcode {
     pub const GET_PROPERTY: u8 = 20;
     pub const GRAB_KEY: u8 = 33;
     pub const QUERY_POINTER: u8 = 38;
+    pub const SET_INPUT_FOCUS: u8 = 42;
     pub const GET_INPUT_FOCUS: u8 = 43;
     pub const GET_KEYBOARD_MAPPING: u8 = 101;
     pub const KILL_CLIENT: u8 = 112;
@@ -258,6 +259,13 @@ impl From<u8> for Place {
             _ => unreachable!(),
         }
     }
+}
+
+#[derive(Debug)]
+pub enum RevertTo {
+    No = 0,
+    PointerRoot = 1,
+    Parent = 2,
 }
 
 #[derive(Debug, Clone, Copy)]
