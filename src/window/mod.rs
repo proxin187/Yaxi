@@ -33,6 +33,8 @@ impl<T> ValuesBuilder<T> where T: ValueMask {
             self.mask |= value.mask();
 
             self.request.extend(value.encode());
+
+            assert!(self.request.len() % 4 == 0);
         }
 
         Ok(self.request.clone())
@@ -69,17 +71,18 @@ impl<T> ValueMask for ConfigureValue<T> where T: Send + Sync + Read + Write + Tr
         }
     }
 
+    // TODO: we need to hardcode this to a 4 byte size aka u32
     fn encode(&self) -> Vec<u8> {
         match self {
             ConfigureValue::X(value)
                 | ConfigureValue::Y(value)
                 | ConfigureValue::Width(value)
                 | ConfigureValue::Height(value)
-                | ConfigureValue::Border(value) => request::encode(value).to_vec(),
+                | ConfigureValue::Border(value) => request::encode(&(*value as u32)).to_vec(),
 
             ConfigureValue::Sibling(window) => request::encode(&window.id()).to_vec(),
 
-            ConfigureValue::StackMode(stack_mode) => vec![*stack_mode as u8],
+            ConfigureValue::StackMode(stack_mode) => request::encode(&(*stack_mode as u32)).to_vec(),
         }
     }
 }
@@ -147,7 +150,7 @@ impl ValueMask for WindowValue {
                 | WindowValue::WinGravity(gravity) => request::encode(&(*gravity as u32)).to_vec(),
 
             WindowValue::OverrideRedirect(value)
-                | WindowValue::SaveUnder(value) => request::encode(&(*value as u8)).to_vec(),
+                | WindowValue::SaveUnder(value) => request::encode(&(*value as u32)).to_vec(),
 
             WindowValue::EventMask(masks)
                 | WindowValue::DoNotPropogateMask(masks)=> request::encode(&self.mask(masks)).to_vec(),
