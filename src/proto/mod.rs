@@ -21,6 +21,7 @@ impl Response {
 
     pub const KEY_PRESS: u8 = 2;
     pub const KEY_RELEASE: u8 = 3;
+    pub const ENTER_NOTIFY: u8 = 7;
     pub const CREATE_NOTIFY: u8 = 16;
     pub const DESTROY_NOTIFY: u8 = 17;
     pub const UNMAP_NOTIFY: u8 = 18;
@@ -63,7 +64,7 @@ impl Opcode {
     pub const SET_INPUT_FOCUS: u8 = 42;
     pub const GET_INPUT_FOCUS: u8 = 43;
     pub const GET_KEYBOARD_MAPPING: u8 = 101;
-    pub const KILL_CLIENT: u8 = 112;
+    pub const KILL_CLIENT: u8 = 113;
 }
 
 #[non_exhaustive]
@@ -358,6 +359,24 @@ pub enum Mode {
 pub type PointerMode = Mode;
 pub type KeyboardMode = Mode;
 
+#[derive(Debug, Clone, Copy)]
+pub enum EnterMode {
+    Normal,
+    Grab,
+    Ungrab,
+}
+
+impl From<u8> for EnterMode {
+    fn from(value: u8) -> EnterMode {
+        match value {
+            0 => EnterMode::Normal,
+            1 => EnterMode::Grab,
+            2 => EnterMode::Ungrab,
+            _ => unreachable!(),
+        }
+    }
+}
+
 #[derive(Clone, Copy)]
 pub enum EventMask {
     NoEvent = 0,
@@ -404,6 +423,16 @@ pub enum Event {
         state: u16,
         keycode: u8,
         send_event: bool,
+    },
+    EnterNotify {
+        root: u32,
+        window: u32,
+        child: u32,
+        coordinates: Coordinates,
+        state: u16,
+        mode: EnterMode,
+        focus: bool,
+        same_screen: bool,
     },
     CreateNotify {
         parent: u32,

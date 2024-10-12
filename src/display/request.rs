@@ -314,6 +314,22 @@ pub struct SelectionReq {
 
 #[repr(packed, C)]
 #[derive(Debug)]
+pub struct EnterNotify {
+    pub time: u32,
+    pub root: u32,
+    pub event: u32,
+    pub child: u32,
+    pub root_x: u16,
+    pub root_y: u16,
+    pub event_x: u16,
+    pub event_y: u16,
+    pub state: u16,
+    pub mode: u8,
+    pub sf: u8,
+}
+
+#[repr(packed, C)]
+#[derive(Debug)]
 pub struct CreateWindow {
     pub opcode: u8,
     pub depth: u8,

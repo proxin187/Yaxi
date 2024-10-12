@@ -579,6 +579,20 @@ impl<T> EventListener<T> where T: Send + Sync + Read + Write + TryClone {
                     send_event: key_event.same_screen == 0,
                 })
             },
+            Response::ENTER_NOTIFY => {
+                let event: EnterNotify = self.stream.recv_decode()?;
+
+                self.events.push(Event::EnterNotify {
+                    root: event.root,
+                    window: event.event,
+                    child: event.child,
+                    coordinates: Coordinates::new(event.event_x, event.event_y, event.root_x, event.root_y),
+                    state: event.state,
+                    mode: EnterMode::from(event.mode),
+                    focus: (event.sf & 0x01) != 0,
+                    same_screen: (event.sf & 0x02) != 0,
+                })
+            },
             Response::CREATE_NOTIFY => {
                 let event: CreateNotify = self.stream.recv_decode()?;
 
