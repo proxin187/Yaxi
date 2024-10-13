@@ -312,13 +312,13 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
 
     /// this request returns the current focused window
     pub fn get_input_focus(&mut self) -> Result<GetInputFocusResponse, Box<dyn std::error::Error>> {
+        self.sequence.append(ReplyKind::GetInputFocus)?;
+
         self.stream.send_encode(GetInputFocus {
             opcode: Opcode::GET_INPUT_FOCUS,
             pad0: 0,
             length: 1,
         })?;
-
-        self.sequence.append(ReplyKind::GetInputFocus)?;
 
         match self.replies.wait()? {
             Reply::GetInputFocus(response) => Ok(response),
@@ -328,6 +328,8 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
 
     /// get an atom from its name
     pub fn intern_atom<'a>(&mut self, name: &'a str, only_if_exists: bool) -> Result<Atom, Box<dyn std::error::Error>> {
+        self.sequence.append(ReplyKind::InternAtom)?;
+
         let request = InternAtom {
             opcode: Opcode::INTERN_ATOM,
             only_if_exists: only_if_exists.then(|| 1).unwrap_or(0),
@@ -339,8 +341,6 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
         self.stream.send(request::encode(&request))?;
 
         self.stream.send_pad(name.as_bytes())?;
-
-        self.sequence.append(ReplyKind::InternAtom)?;
 
         match self.replies.wait()? {
             Reply::InternAtom(response) => match response.atom {
@@ -358,6 +358,8 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
 
     /// get the keyboard mapping from the server
     pub fn get_keyboard_mapping(&mut self) -> Result<(Vec<Keysym>, u8), Box<dyn std::error::Error>> {
+        self.sequence.append(ReplyKind::GetKeyboardMapping)?;
+
         self.stream.send_encode(GetKeyboardMapping {
             opcode: Opcode::GET_KEYBOARD_MAPPING,
             pad0: 0,
@@ -366,8 +368,6 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
             count: self.setup.max_keycode - self.setup.min_keycode + 1,
             pad1: [0u8; 2],
         })?;
-
-        self.sequence.append(ReplyKind::GetKeyboardMapping)?;
 
         match self.replies.wait()? {
             Reply::GetKeyboardMapping { keysyms, keysyms_per_keycode } => Ok((keysyms, keysyms_per_keycode)),

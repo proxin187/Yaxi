@@ -251,6 +251,8 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
         roots: Roots,
         id: u32
     ) -> Result<Window<T>, Box<dyn std::error::Error>> {
+        sequence.append(ReplyKind::GetWindowAttributes)?;
+
         let screen = roots.first()?;
 
         stream.send_encode(GetWindowAttributes {
@@ -259,8 +261,6 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
             length: 2,
             wid: id,
         })?;
-
-        sequence.append(ReplyKind::GetWindowAttributes)?;
 
         match replies.wait()? {
             Reply::GetWindowAttributes(response) => {
@@ -278,14 +278,14 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
     }
 
     fn generic_window(&mut self, opcode: u8, length: u16) -> Result<(), Box<dyn std::error::Error>> {
+        self.sequence.skip();
+
         self.stream.send_encode(GenericWindow {
             opcode,
             pad0: 0,
             length,
             wid: self.id(),
         })?;
-
-        self.sequence.skip();
 
         Ok(())
     }
@@ -301,6 +301,8 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
 
     /// create a child window with provided window arguments
     pub fn create_window(&mut self, mut window: WindowArguments) -> Result<Window<T>, Box<dyn std::error::Error>> {
+        self.sequence.skip();
+
         let window_values_request = window.values.build()?;
         let wid = xid::next()?;
 
@@ -322,13 +324,13 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
 
         self.stream.send(&window_values_request)?;
 
-        self.sequence.skip();
-
         Ok(Window::new(self.stream.try_clone()?, self.replies.clone(), self.sequence.clone(), window.visual, window.depth, wid))
     }
 
     /// kill the window
     pub fn kill(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        self.sequence.skip();
+
         self.stream.send_encode(KillClient {
             opcode: Opcode::KILL_CLIENT,
             pad0: 0,
@@ -336,14 +338,12 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
             resource: self.id(),
         })?;
 
-        self.sequence.skip();
-
         Ok(())
     }
 
     /// sets the current input focus to the window
     pub fn set_input_focus(&mut self, revert_to: RevertTo) -> Result<(), Box<dyn std::error::Error>> {
-        // TODO: un-hardcode time as current time
+        self.sequence.skip();
 
         self.stream.send_encode(SetInputFocus {
             opcode: Opcode::SET_INPUT_FOCUS,
@@ -353,13 +353,13 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
             time: 0,
         })?;
 
-        self.sequence.skip();
-
         Ok(())
     }
 
     /// change the attributes of a window
     pub fn change_attributes(&mut self, mut values: ValuesBuilder<WindowValue>) -> Result<(), Box<dyn std::error::Error>> {
+        self.sequence.skip();
+
         let request = values.build()?;
 
         self.stream.send_encode(ChangeWindowAttributes {
@@ -372,13 +372,13 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
 
         self.stream.send(&request)?;
 
-        self.sequence.skip();
-
         Ok(())
     }
 
     /// configure the window
     pub fn configure(&mut self, mut values: ValuesBuilder<ConfigureValue<T>>) -> Result<(), Box<dyn std::error::Error>> {
+        self.sequence.skip();
+
         let request = values.build()?;
 
         self.stream.send_encode(ConfigureWindow {
@@ -391,8 +391,6 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
         })?;
 
         self.stream.send(&request)?;
-
-        self.sequence.skip();
 
         Ok(())
     }
@@ -458,6 +456,8 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
         mode: PropMode,
         data: &[u8]
     ) -> Result<(), Box<dyn std::error::Error>> {
+        self.sequence.skip();
+
         let request = ChangeProperty {
             opcode: Opcode::CHANGE_PROPERTY,
             mode: mode as u8,
@@ -474,8 +474,6 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
 
         self.stream.send_pad(data)?;
 
-        self.sequence.skip();
-
         Ok(())
     }
 
@@ -485,13 +483,13 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
 
         self.stream.send_encode(property.id())?;
 
-        self.sequence.skip();
-
         Ok(())
     }
 
     /// get the value of a property from a window
     pub fn get_property(&mut self, property: Atom, type_: Atom, delete: bool) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+        self.sequence.append(ReplyKind::GetProperty)?;
+
         self.stream.send_encode(GetProperty {
             opcode: Opcode::GET_PROPERTY,
             delete: delete.then(|| 1).unwrap_or(0),
@@ -503,8 +501,6 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
             long_length: u16::MAX as u32,
         })?;
 
-        self.sequence.append(ReplyKind::GetProperty)?;
-
         match self.replies.wait()? {
             Reply::GetProperty { value } => Ok(value),
             _ => unreachable!(),
@@ -513,14 +509,14 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
 
     /// get info about the pointer such as position
     pub fn query_pointer(&mut self) -> Result<QueryPointerResponse, Box<dyn std::error::Error>> {
+        self.sequence.append(ReplyKind::QueryPointer)?;
+
         self.stream.send_encode(QueryPointer {
             opcode: Opcode::QUERY_POINTER,
             pad0: 0,
             length: 2,
             wid: self.id(),
         })?;
-
-        self.sequence.append(ReplyKind::QueryPointer)?;
 
         match self.replies.wait()? {
             Reply::QueryPointer(response) => Ok(response),
@@ -538,6 +534,8 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
         keyboard_mode: KeyboardMode,
         owner_events: bool,
     ) -> Result<(), Box<dyn std::error::Error>> {
+        self.sequence.skip();
+
         self.stream.send_encode(GrabKey {
             opcode: Opcode::GRAB_KEY,
             owner_events: owner_events.then(|| 1).unwrap_or(0),
@@ -549,8 +547,6 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
             keyboard_mode: keyboard_mode as u8,
             pad0: [0u8; 3],
         })?;
-
-        self.sequence.skip();
 
         Ok(())
     }
