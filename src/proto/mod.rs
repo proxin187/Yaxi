@@ -22,6 +22,8 @@ impl Response {
     pub const KEY_PRESS: u8 = 2;
     pub const KEY_RELEASE: u8 = 3;
     pub const ENTER_NOTIFY: u8 = 7;
+    pub const FOCUS_IN: u8 = 9;
+    pub const FOCUS_OUT: u8 = 10;
     pub const CREATE_NOTIFY: u8 = 16;
     pub const DESTROY_NOTIFY: u8 = 17;
     pub const UNMAP_NOTIFY: u8 = 18;
@@ -412,6 +414,16 @@ pub enum EventMask {
 pub enum Cursor {
 }
 
+// TODO: THIS IS NOT DONE, ALSO FINISH FocusIn and FocusOut events, they arent done
+#[derive(Debug)]
+pub enum FocusDetail {
+    Ancestor = 0,
+    Virtual = 1,
+    Inferior = 2,
+    Nonlinear = 3,
+    NonlinearVirtual = 4,
+}
+
 #[derive(Debug)]
 pub enum Event {
     KeyEvent {
@@ -433,6 +445,9 @@ pub enum Event {
         mode: EnterMode,
         focus: bool,
         same_screen: bool,
+    },
+    FocusIn {
+        detail: FocusDetail,
     },
     CreateNotify {
         parent: u32,

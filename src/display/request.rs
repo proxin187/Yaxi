@@ -563,6 +563,22 @@ pub struct GetInputFocusResponse {
     pub(crate) pad0: [u8; 20],
 }
 
+#[repr(packed, C)]
+#[derive(Debug, Clone)]
+pub struct FocusIn {
+    pub event: u32,
+    pub mode: u8,
+    pub(crate) pad0: [u8; 23],
+}
+
+#[repr(packed, C)]
+#[derive(Debug, Clone)]
+pub struct FocusOut {
+    pub event: u32,
+    pub mode: u8,
+    pub(crate) pad0: [u8; 23],
+}
+
 pub fn encode<T>(ptr: &T) -> &[u8] {
     unsafe {
         slice::from_raw_parts((ptr as *const T) as *const u8, mem::size_of::<T>())
