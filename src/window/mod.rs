@@ -395,6 +395,16 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
         Ok(())
     }
 
+    /// set the border of a window to a pixel
+    pub fn set_border_pixel(&mut self, pixel: u32) -> Result<(), Box<dyn std::error::Error>> {
+        self.change_attributes(ValuesBuilder::new(vec![WindowValue::BorderPixel(pixel)]))
+    }
+
+    /// set the border width of a window
+    pub fn set_border_width(&mut self, width: u16) -> Result<(), Box<dyn std::error::Error>> {
+        self.configure(ValuesBuilder::new(vec![ConfigureValue::Border(width)]))
+    }
+
     /// move a window, this is a fancy wrapper for configure
     pub fn mov(&mut self, x: u16, y: u16) -> Result<(), Box<dyn std::error::Error>> {
         self.configure(ValuesBuilder::new(vec![ConfigureValue::X(x), ConfigureValue::Y(y)]))
