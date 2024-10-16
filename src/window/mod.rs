@@ -135,6 +135,7 @@ impl ValueMask for WindowValue {
         }
     }
 
+    // TODO: there is something wrong here lol, the other one works tho lol
     fn encode(&self) -> Vec<u8> {
         match self {
             WindowValue::BgPixmap(value)
@@ -143,7 +144,7 @@ impl ValueMask for WindowValue {
                 | WindowValue::BorderPixel(value)
                 | WindowValue::BackingPlane(value)
                 | WindowValue::BackingPixel(value)
-                | WindowValue::Colormap(value) => request::encode(&value).to_vec(),
+                | WindowValue::Colormap(value) => request::encode(&(*value as u32)).to_vec(),
 
             WindowValue::BitGravity(gravity)
                 | WindowValue::WinGravity(gravity) => request::encode(&(*gravity as u32)).to_vec(),

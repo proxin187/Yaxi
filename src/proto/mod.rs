@@ -414,7 +414,6 @@ pub enum EventMask {
 pub enum Cursor {
 }
 
-// TODO: THIS IS NOT DONE, ALSO FINISH FocusIn and FocusOut events, they arent done
 #[derive(Debug)]
 pub enum FocusDetail {
     Ancestor = 0,
@@ -422,6 +421,45 @@ pub enum FocusDetail {
     Inferior = 2,
     Nonlinear = 3,
     NonlinearVirtual = 4,
+    Pointer = 5,
+    PointerRoot = 6,
+    Nop = 7,
+}
+
+
+impl From<u8> for FocusDetail {
+    fn from(value: u8) -> FocusDetail {
+        match value {
+            0 => FocusDetail::Ancestor,
+            1 => FocusDetail::Virtual,
+            2 => FocusDetail::Inferior,
+            3 => FocusDetail::Nonlinear,
+            4 => FocusDetail::NonlinearVirtual,
+            5 => FocusDetail::Pointer,
+            6 => FocusDetail::PointerRoot,
+            _ => FocusDetail::Nop,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum FocusMode {
+    Normal = 0,
+    Grab = 1,
+    Ungrab = 2,
+    WhileGrab = 3,
+}
+
+impl From<u8> for FocusMode {
+    fn from(value: u8) -> FocusMode {
+        match value {
+            0 => FocusMode::Normal,
+            1 => FocusMode::Grab,
+            2 => FocusMode::Ungrab,
+            3 => FocusMode::WhileGrab,
+            _ => unreachable!(),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -448,6 +486,13 @@ pub enum Event {
     },
     FocusIn {
         detail: FocusDetail,
+        mode: FocusMode,
+        window: u32,
+    },
+    FocusOut {
+        detail: FocusDetail,
+        mode: FocusMode,
+        window: u32,
     },
     CreateNotify {
         parent: u32,

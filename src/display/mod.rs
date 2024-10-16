@@ -593,6 +593,24 @@ impl<T> EventListener<T> where T: Send + Sync + Read + Write + TryClone {
                     same_screen: (event.sf & 0x02) != 0,
                 })
             },
+            Response::FOCUS_IN => {
+                let event: FocusIn = self.stream.recv_decode()?;
+
+                self.events.push(Event::FocusIn {
+                    detail: FocusDetail::from(generic.detail),
+                    mode: FocusMode::from(event.mode),
+                    window: event.event,
+                })
+            },
+            Response::FOCUS_OUT => {
+                let event: FocusOut = self.stream.recv_decode()?;
+
+                self.events.push(Event::FocusOut {
+                    detail: FocusDetail::from(generic.detail),
+                    mode: FocusMode::from(event.mode),
+                    window: event.event,
+                })
+            },
             Response::CREATE_NOTIFY => {
                 let event: CreateNotify = self.stream.recv_decode()?;
 
