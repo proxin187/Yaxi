@@ -150,6 +150,7 @@ impl Atom {
     pub const FONT: Atom = Atom::new(18);
     pub const INTEGER: Atom = Atom::new(19);
     pub const PIXMAP: Atom = Atom::new(20);
+    pub const WINDOW: Atom = Atom::new(33);
 
     /// create a new atom from its id
     pub const fn new(id: u32) -> Atom {
