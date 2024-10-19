@@ -509,6 +509,11 @@ impl<T> EventListener<T> where T: Send + Sync + Read + Write + TryClone {
 
                 self.replies.push(Reply::GetWindowAttributes(response))?;
             },
+            ReplyKind::GetGeometry => {
+                let response: GetGeometryResponse = self.stream.recv_decode()?;
+
+                self.replies.push(Reply::GetGeometry(response))?;
+            },
             ReplyKind::QueryPointer => {
                 let response: QueryPointerResponse = self.stream.recv_decode()?;
 

@@ -57,6 +57,7 @@ impl Opcode {
     pub const UNMAP_WINDOW: u8 = 10;
     pub const UNMAP_SUBWINDOWS: u8 = 11;
     pub const CONFIGURE_WINDOW: u8 = 12;
+    pub const GET_GEOMETRY: u8 = 14;
     pub const INTERN_ATOM: u8 = 16;
     pub const CHANGE_PROPERTY: u8 = 18;
     pub const DELETE_PROPERTY: u8 = 19;
@@ -129,6 +130,7 @@ impl<T> Queue<T> {
 pub enum Reply {
     InternAtom(InternAtomResponse),
     GetWindowAttributes(GetWindowAttributesResponse),
+    GetGeometry(GetGeometryResponse),
     QueryPointer(QueryPointerResponse),
     GetInputFocus(GetInputFocusResponse),
     GetProperty {
@@ -148,6 +150,7 @@ pub enum ReplyKind {
     QueryPointer,
     GetKeyboardMapping,
     GetInputFocus,
+    GetGeometry,
 }
 
 #[derive(Debug)]

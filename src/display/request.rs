@@ -579,6 +579,28 @@ pub struct FocusOut {
     pub(crate) pad0: [u8; 23],
 }
 
+#[repr(packed, C)]
+#[derive(Debug, Clone)]
+pub struct GetGeometry {
+    pub opcode: u8,
+    pub pad0: u8,
+    pub length: u16,
+    pub window: u32,
+}
+
+#[repr(packed, C)]
+#[derive(Debug, Clone)]
+pub struct GetGeometryResponse {
+    pub(crate) length: u32,
+    pub root: u32,
+    pub x: u16,
+    pub y: u16,
+    pub width: u16,
+    pub height: u16,
+    pub border_width: u16,
+    pub(crate) pad0: [u8; 10],
+}
+
 pub fn encode<T>(ptr: &T) -> &[u8] {
     unsafe {
         slice::from_raw_parts((ptr as *const T) as *const u8, mem::size_of::<T>())

@@ -278,6 +278,40 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
         }
     }
 
+    /// get the window attributes
+    pub fn get_window_attributes(&mut self) -> Result<GetWindowAttributesResponse, Box<dyn std::error::Error>> {
+        self.sequence.append(ReplyKind::GetWindowAttributes)?;
+
+        self.stream.send_encode(GetWindowAttributes {
+            opcode: Opcode::GET_WINDOW_ATTRIBUTES,
+            pad0: 0,
+            length: 2,
+            wid: self.id(),
+        })?;
+
+        match self.replies.wait()? {
+            Reply::GetWindowAttributes(response) => Ok(response),
+            _ => unreachable!(),
+        }
+    }
+
+    /// get the geometry of the window
+    pub fn get_geometry(&mut self) -> Result<GetGeometryResponse, Box<dyn std::error::Error>> {
+        self.sequence.append(ReplyKind::GetGeometry)?;
+
+        self.stream.send_encode(GetGeometry {
+            opcode: Opcode::GET_WINDOW_ATTRIBUTES,
+            pad0: 0,
+            length: 2,
+            window: self.id(),
+        })?;
+
+        match self.replies.wait()? {
+            Reply::GetGeometry(response) => Ok(response),
+            _ => unreachable!(),
+        }
+    }
+
     fn generic_window(&mut self, opcode: u8, length: u16) -> Result<(), Box<dyn std::error::Error>> {
         self.sequence.skip();
 
