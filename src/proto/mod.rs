@@ -62,6 +62,10 @@ impl Opcode {
     pub const CHANGE_PROPERTY: u8 = 18;
     pub const DELETE_PROPERTY: u8 = 19;
     pub const GET_PROPERTY: u8 = 20;
+    pub const GRAB_POINTER: u8 = 26;
+    pub const UNGRAB_POINTER: u8 = 27;
+    pub const GRAB_BUTTON: u8 = 28;
+    pub const UNGRAB_BUTTON: u8 = 29;
     pub const GRAB_KEY: u8 = 33;
     pub const QUERY_POINTER: u8 = 38;
     pub const SET_INPUT_FOCUS: u8 = 42;
@@ -133,6 +137,7 @@ pub enum Reply {
     GetGeometry(GetGeometryResponse),
     QueryPointer(QueryPointerResponse),
     GetInputFocus(GetInputFocusResponse),
+    GrabPointer(GrabPointerResponse),
     GetProperty {
         value: Vec<u8>,
     },
@@ -151,6 +156,7 @@ pub enum ReplyKind {
     GetKeyboardMapping,
     GetInputFocus,
     GetGeometry,
+    GrabPointer,
 }
 
 #[derive(Debug)]
@@ -415,6 +421,16 @@ pub enum EventMask {
 // TODO: add cursors
 #[derive(Clone, Copy)]
 pub enum Cursor {
+    Nop = 0x0,
+}
+
+#[derive(Clone, Copy)]
+pub enum Button {
+    Button1 = 1,
+    Button2 = 2,
+    Button3 = 3,
+    Button4 = 4,
+    Button5 = 5,
 }
 
 #[derive(Debug)]

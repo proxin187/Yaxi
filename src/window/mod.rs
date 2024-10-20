@@ -595,6 +595,85 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
 
         Ok(())
     }
+
+    /// grab a button from the window,
+    /// buttons are not valid modifiers
+    pub fn grab_button(
+        &mut self,
+        button: Button,
+        modifiers: Vec<KeyMask>,
+        event_mask: Vec<EventMask>,
+        confine_to: u32,
+        cursor: Cursor,
+        pointer_mode: PointerMode,
+        keyboard_mode: KeyboardMode,
+        owner_events: bool,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        self.sequence.skip();
+
+        self.stream.send_encode(GrabButton {
+            opcode: Opcode::GRAB_BUTTON,
+            owner_events: owner_events.then(|| 1).unwrap_or(0),
+            length: 6,
+            grab_window: self.id(),
+            event_mask: event_mask.iter().fold(0, |acc, mask| acc | *mask as u16),
+            pointer_mode: pointer_mode as u8,
+            keyboard_mode: keyboard_mode as u8,
+            confine_to,
+            cursor: cursor as u32,
+            button: button as u8,
+            modifiers: modifiers.iter().fold(0, |acc, modifier| acc | *modifier as u16),
+        })?;
+
+        Ok(())
+    }
+
+    /// ungrab a button from the window,
+    /// buttons are not valid modifiers
+    pub fn ungrab_button(&mut self, button: Button, modifiers: Vec<KeyMask>) -> Result<(), Box<dyn std::error::Error>> {
+        self.sequence.skip();
+
+        self.stream.send_encode(UngrabButton {
+            opcode: Opcode::UNGRAB_BUTTON,
+            button: button as u8,
+            length: 3,
+            grab_window: self.id(),
+            modifiers: modifiers.iter().fold(0, |acc, modifier| acc | *modifier as u16),
+            pad0: [0u8; 2],
+        })?;
+
+        Ok(())
+    }
+
+    /// grab the pointer
+    pub fn grab_pointer(
+        &mut self,
+        event_mask: Vec<EventMask>,
+        confine_to: u32,
+        cursor: Cursor,
+        pointer_mode: PointerMode,
+        keyboard_mode: KeyboardMode,
+        owner_events: bool,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        self.sequence.append(ReplyKind::GrabPointer)?;
+
+        // TODO: un-hardcode time as current time
+
+        self.stream.send_encode(GrabPointer {
+            opcode: Opcode::GRAB_POINTER,
+            owner_events: owner_events.then(|| 1).unwrap_or(0),
+            length: 6,
+            grab_window: self.id(),
+            event_mask: event_mask.iter().fold(0, |acc, mask| acc | *mask as u16),
+            pointer_mode: pointer_mode as u8,
+            keyboard_mode: keyboard_mode as u8,
+            confine_to,
+            cursor: cursor as u32,
+            time: 0,
+        })?;
+
+        Ok(())
+    }
 }
 
 

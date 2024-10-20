@@ -519,6 +519,64 @@ pub struct GrabKey {
 
 #[repr(packed, C)]
 #[derive(Debug)]
+pub struct GrabButton {
+    pub opcode: u8,
+    pub owner_events: u8,
+    pub length: u16,
+    pub grab_window: u32,
+    pub event_mask: u16,
+    pub pointer_mode: u8,
+    pub keyboard_mode: u8,
+    pub confine_to: u32,
+    pub cursor: u32,
+    pub button: u8,
+    pub modifiers: u16,
+}
+
+#[repr(packed, C)]
+#[derive(Debug)]
+pub struct UngrabButton {
+    pub opcode: u8,
+    pub button: u8,
+    pub length: u16,
+    pub grab_window: u32,
+    pub modifiers: u16,
+    pub pad0: [u8; 2],
+}
+
+#[repr(packed, C)]
+#[derive(Debug)]
+pub struct GrabPointer {
+    pub opcode: u8,
+    pub owner_events: u8,
+    pub length: u16,
+    pub grab_window: u32,
+    pub event_mask: u16,
+    pub pointer_mode: u8,
+    pub keyboard_mode: u8,
+    pub confine_to: u32,
+    pub cursor: u32,
+    pub time: u32,
+}
+
+#[repr(packed, C)]
+#[derive(Debug, Clone)]
+pub struct GrabPointerResponse {
+    pub length: u32,
+    pub(crate) pad0: [u8; 24],
+}
+
+#[repr(packed, C)]
+#[derive(Debug)]
+pub struct UngrabPointer {
+    pub opcode: u8,
+    pub pad0: u8,
+    pub length: u16,
+    pub time: u32,
+}
+
+#[repr(packed, C)]
+#[derive(Debug)]
 pub struct ConfigureWindow {
     pub opcode: u8,
     pub pad0: u8,

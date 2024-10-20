@@ -404,6 +404,21 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
             .ok_or(Box::new(Error::InvalidKeysym))
     }
 
+    pub fn ungrab_pointer(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        self.sequence.skip();
+
+        // TODO: un-hardcode time as current time
+
+        self.stream.send_encode(UngrabPointer {
+            opcode: Opcode::UNGRAB_POINTER,
+            pad0: 0,
+            length: 2,
+            time: 0,
+        })?;
+
+        Ok(())
+    }
+
     fn endian(&self) -> u8 {
         cfg!(target_endian = "little")
             .then(|| 0x6c)
@@ -513,6 +528,11 @@ impl<T> EventListener<T> where T: Send + Sync + Read + Write + TryClone {
                 let response: GetGeometryResponse = self.stream.recv_decode()?;
 
                 self.replies.push(Reply::GetGeometry(response))?;
+            },
+            ReplyKind::GrabPointer => {
+                let response: GrabPointerResponse = self.stream.recv_decode()?;
+
+                self.replies.push(Reply::GrabPointer(response))?;
             },
             ReplyKind::QueryPointer => {
                 let response: QueryPointerResponse = self.stream.recv_decode()?;
