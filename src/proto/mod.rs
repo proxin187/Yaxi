@@ -21,6 +21,9 @@ impl Response {
 
     pub const KEY_PRESS: u8 = 2;
     pub const KEY_RELEASE: u8 = 3;
+    pub const BUTTON_PRESS: u8 = 4;
+    pub const BUTTON_RELEASE: u8 = 5;
+    pub const MOTION_NOTIFY: u8 = 6;
     pub const ENTER_NOTIFY: u8 = 7;
     pub const FOCUS_IN: u8 = 9;
     pub const FOCUS_OUT: u8 = 10;
@@ -208,12 +211,6 @@ impl SequenceManager {
 
         Ok(())
     }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum KeyEventKind {
-    Press,
-    Release,
 }
 
 #[derive(Debug, Clone)]
@@ -481,10 +478,35 @@ impl From<u8> for FocusMode {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum EventKind {
+    Press,
+    Release,
+}
+
 #[derive(Debug)]
 pub enum Event {
     KeyEvent {
-        kind: KeyEventKind,
+        kind: EventKind,
+        coordinates: Coordinates,
+        window: u32,
+        root: u32,
+        subwindow: u32,
+        state: u16,
+        keycode: u8,
+        send_event: bool,
+    },
+    ButtonEvent {
+        kind: EventKind,
+        coordinates: Coordinates,
+        window: u32,
+        root: u32,
+        subwindow: u32,
+        state: u16,
+        keycode: u8,
+        send_event: bool,
+    },
+    MotionNotify {
         coordinates: Coordinates,
         window: u32,
         root: u32,

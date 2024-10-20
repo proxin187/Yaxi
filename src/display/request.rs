@@ -151,6 +151,24 @@ pub struct KeyEvent {
 
 #[repr(packed, C)]
 #[derive(Debug)]
+pub struct ButtonEvent {
+    pub time: u32,
+    pub root: u32,
+    pub event: u32,
+    pub child: u32,
+    pub root_x: u16,
+    pub root_y: u16,
+    pub event_x: u16,
+    pub event_y: u16,
+    pub state: u16,
+    pub same_screen: u8,
+    pub pad0: u8,
+}
+
+pub type MotionNotify = ButtonEvent;
+
+#[repr(packed, C)]
+#[derive(Debug)]
 pub struct CircNotify {
     pub event: u32,
     pub window: u32,

@@ -570,6 +570,9 @@ impl<T> EventListener<T> where T: Send + Sync + Read + Write + TryClone {
         Ok(())
     }
 
+    // TODO: there is a lot of repetition here, it may be possible to procedurally generate this
+    // through macros instead
+
     fn handle_event(&mut self, generic: GenericEvent) -> Result<(), Box<dyn std::error::Error>> {
         match generic.opcode & 0b0111111 {
             Response::ERROR => {
@@ -592,8 +595,8 @@ impl<T> EventListener<T> where T: Send + Sync + Read + Write + TryClone {
 
                 self.events.push(Event::KeyEvent {
                     kind: match generic.opcode & 0b0111111 {
-                        Response::KEY_PRESS => KeyEventKind::Press,
-                        Response::KEY_RELEASE => KeyEventKind::Release,
+                        Response::KEY_PRESS => EventKind::Press,
+                        Response::KEY_RELEASE => EventKind::Release,
                         _ => unreachable!(),
                     },
                     coordinates: Coordinates::new(key_event.event_x, key_event.event_y, key_event.root_x, key_event.root_y),
@@ -603,6 +606,37 @@ impl<T> EventListener<T> where T: Send + Sync + Read + Write + TryClone {
                     state: key_event.state,
                     keycode: generic.detail,
                     send_event: key_event.same_screen == 0,
+                })
+            },
+            Response::BUTTON_PRESS | Response::BUTTON_RELEASE => {
+                let button_event: ButtonEvent = self.stream.recv_decode()?;
+
+                self.events.push(Event::ButtonEvent {
+                    kind: match generic.opcode & 0b0111111 {
+                        Response::KEY_PRESS => EventKind::Press,
+                        Response::KEY_RELEASE => EventKind::Release,
+                        _ => unreachable!(),
+                    },
+                    coordinates: Coordinates::new(button_event.event_x, button_event.event_y, button_event.root_x, button_event.root_y),
+                    window: button_event.event,
+                    root: button_event.root,
+                    subwindow: button_event.child,
+                    state: button_event.state,
+                    keycode: generic.detail,
+                    send_event: button_event.same_screen == 0,
+                })
+            },
+            Response::MOTION_NOTIFY => {
+                let motion_notify: MotionNotify = self.stream.recv_decode()?;
+
+                self.events.push(Event::MotionNotify {
+                    coordinates: Coordinates::new(motion_notify.event_x, motion_notify.event_y, motion_notify.root_x, motion_notify.root_y),
+                    window: motion_notify.event,
+                    root: motion_notify.root,
+                    subwindow: motion_notify.child,
+                    state: motion_notify.state,
+                    keycode: generic.detail,
+                    send_event: motion_notify.same_screen == 0,
                 })
             },
             Response::ENTER_NOTIFY => {
