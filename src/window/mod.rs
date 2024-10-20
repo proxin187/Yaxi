@@ -300,7 +300,7 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
         self.sequence.append(ReplyKind::GetGeometry)?;
 
         self.stream.send_encode(GetGeometry {
-            opcode: Opcode::GET_WINDOW_ATTRIBUTES,
+            opcode: Opcode::GET_GEOMETRY,
             pad0: 0,
             length: 2,
             window: self.id(),
