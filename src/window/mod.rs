@@ -673,7 +673,10 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
             time: 0,
         })?;
 
-        Ok(())
+        match self.replies.wait()? {
+            Reply::GrabPointer(_) => Ok(()),
+            _ => unreachable!(),
+        }
     }
 }
 
