@@ -603,11 +603,11 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
         button: Button,
         modifiers: Vec<KeyMask>,
         event_mask: Vec<EventMask>,
-        confine_to: u32,
         cursor: Cursor,
         pointer_mode: PointerMode,
         keyboard_mode: KeyboardMode,
         owner_events: bool,
+        confine_to: u32,
     ) -> Result<(), Box<dyn std::error::Error>> {
         self.sequence.skip();
 
@@ -649,11 +649,11 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
     pub fn grab_pointer(
         &mut self,
         event_mask: Vec<EventMask>,
-        confine_to: u32,
         cursor: Cursor,
         pointer_mode: PointerMode,
         keyboard_mode: KeyboardMode,
         owner_events: bool,
+        confine_to: u32,
     ) -> Result<(), Box<dyn std::error::Error>> {
         self.sequence.append(ReplyKind::GrabPointer)?;
 
