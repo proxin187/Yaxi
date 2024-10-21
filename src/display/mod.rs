@@ -622,7 +622,7 @@ impl<T> EventListener<T> where T: Send + Sync + Read + Write + TryClone {
                     root: button_event.root,
                     subwindow: button_event.child,
                     state: button_event.state,
-                    keycode: generic.detail,
+                    button: Button::from(generic.detail),
                     send_event: button_event.same_screen == 0,
                 })
             },
@@ -635,7 +635,6 @@ impl<T> EventListener<T> where T: Send + Sync + Read + Write + TryClone {
                     root: motion_notify.root,
                     subwindow: motion_notify.child,
                     state: motion_notify.state,
-                    keycode: generic.detail,
                     send_event: motion_notify.same_screen == 0,
                 })
             },

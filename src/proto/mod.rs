@@ -421,13 +421,25 @@ pub enum Cursor {
     Nop = 0x0,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub enum Button {
     Button1 = 1,
     Button2 = 2,
     Button3 = 3,
     Button4 = 4,
     Button5 = 5,
+}
+
+impl From<u8> for Button {
+    fn from(value: u8) -> Button {
+        match value {
+            1 => Button::Button1,
+            2 => Button::Button2,
+            3 => Button::Button3,
+            4 => Button::Button4,
+            _ => Button::Button5,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -503,7 +515,7 @@ pub enum Event {
         root: u32,
         subwindow: u32,
         state: u16,
-        keycode: u8,
+        button: Button,
         send_event: bool,
     },
     MotionNotify {
@@ -512,7 +524,6 @@ pub enum Event {
         root: u32,
         subwindow: u32,
         state: u16,
-        keycode: u8,
         send_event: bool,
     },
     EnterNotify {
