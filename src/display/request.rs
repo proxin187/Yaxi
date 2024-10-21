@@ -548,6 +548,7 @@ pub struct GrabButton {
     pub confine_to: u32,
     pub cursor: u32,
     pub button: u8,
+    pub pad0: u8,
     pub modifiers: u16,
 }
 

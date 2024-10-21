@@ -613,8 +613,8 @@ impl<T> EventListener<T> where T: Send + Sync + Read + Write + TryClone {
 
                 self.events.push(Event::ButtonEvent {
                     kind: match generic.opcode & 0b0111111 {
-                        Response::KEY_PRESS => EventKind::Press,
-                        Response::KEY_RELEASE => EventKind::Release,
+                        Response::BUTTON_PRESS => EventKind::Press,
+                        Response::BUTTON_RELEASE => EventKind::Release,
                         _ => unreachable!(),
                     },
                     coordinates: Coordinates::new(button_event.event_x, button_event.event_y, button_event.root_x, button_event.root_y),

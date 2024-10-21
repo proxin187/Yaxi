@@ -622,6 +622,7 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
             confine_to,
             cursor: cursor as u32,
             button: button as u8,
+            pad0: 0,
             modifiers: modifiers.iter().fold(0, |acc, modifier| acc | *modifier as u16),
         })?;
 
