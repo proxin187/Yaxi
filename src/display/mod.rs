@@ -1,7 +1,7 @@
 pub(crate) mod error;
-pub(crate) mod request;
 pub(crate) mod auth;
 pub(crate) mod xid;
+pub mod request;
 
 use crate::proto::*;
 use crate::window::*;
