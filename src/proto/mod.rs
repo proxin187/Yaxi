@@ -215,10 +215,10 @@ impl SequenceManager {
 
 #[derive(Debug, Clone)]
 pub struct Coordinates {
-    x: u16,
-    y: u16,
-    root_x: u16,
-    root_y: u16,
+    pub x: u16,
+    pub y: u16,
+    pub root_x: u16,
+    pub root_y: u16,
 }
 
 impl Coordinates {
