@@ -462,6 +462,16 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
         self.change_attributes(ValuesBuilder::new(vec![WindowValue::EventMask(events.to_vec())]))
     }
 
+    /// raise the window to the top of the stack
+    pub fn raise(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        self.configure(ValuesBuilder::new(vec![ConfigureValue::StackMode(StackMode::Above)]))
+    }
+
+    /// lower the window to the bottom of the stack
+    pub fn lower(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        self.configure(ValuesBuilder::new(vec![ConfigureValue::StackMode(StackMode::Below)]))
+    }
+
     /// become the child of a parent window
     pub fn reparent(&mut self, parent: Window<T>, x: u16, y: u16) -> Result<(), Box<dyn std::error::Error>> {
         self.sequence.skip();
