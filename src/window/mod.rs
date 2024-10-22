@@ -67,7 +67,7 @@ impl<T> ValueMask for ConfigureValue<T> where T: Send + Sync + Read + Write + Tr
             ConfigureValue::Height(_) => 0x8,
             ConfigureValue::Border(_) => 0x10,
             ConfigureValue::Sibling(_) => 0x20,
-            ConfigureValue::StackMode(_) => 0x20,
+            ConfigureValue::StackMode(_) => 0x40,
         }
     }
 
