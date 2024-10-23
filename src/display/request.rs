@@ -678,6 +678,43 @@ pub struct GetGeometryResponse {
     pub(crate) pad0: [u8; 10],
 }
 
+#[repr(packed, C)]
+#[derive(Debug, Clone)]
+pub struct QueryExtension {
+    pub opcode: u8,
+    pub pad0: u8,
+    pub length: u16,
+    pub name_len: u16,
+    pub pad1: u16,
+}
+
+#[repr(packed, C)]
+#[derive(Debug, Clone)]
+pub struct QueryExtensionResponse {
+    pub(crate) length: u32,
+    pub present: u8,
+    pub major_opcode: u8,
+    pub first_event: u8,
+    pub first_error: u8,
+    pub(crate) pad0: [u8; 20],
+}
+
+#[repr(packed, C)]
+#[derive(Debug, Clone)]
+pub struct XineramaIsActive {
+    pub opcode: u8,
+    pub minor: u8,
+    pub length: u16,
+}
+
+#[repr(packed, C)]
+#[derive(Debug, Clone)]
+pub struct XineramaIsActiveResponse {
+    pub(crate) length: u32,
+    pub state: u32,
+    pub(crate) pad0: [u32; 5],
+}
+
 pub fn encode<T>(ptr: &T) -> &[u8] {
     unsafe {
         slice::from_raw_parts((ptr as *const T) as *const u8, mem::size_of::<T>())

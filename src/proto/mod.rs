@@ -73,6 +73,7 @@ impl Opcode {
     pub const QUERY_POINTER: u8 = 38;
     pub const SET_INPUT_FOCUS: u8 = 42;
     pub const GET_INPUT_FOCUS: u8 = 43;
+    pub const QUERY_EXTENSION: u8 = 98;
     pub const GET_KEYBOARD_MAPPING: u8 = 101;
     pub const KILL_CLIENT: u8 = 113;
 }
@@ -141,6 +142,11 @@ pub enum Reply {
     QueryPointer(QueryPointerResponse),
     GetInputFocus(GetInputFocusResponse),
     GrabPointer(GrabPointerResponse),
+    QueryExtension(QueryExtensionResponse),
+
+    // TODO: put this behind a feature flag
+    XineramaIsActive(XineramaIsActiveResponse),
+
     GetProperty {
         value: Vec<u8>,
     },
@@ -160,6 +166,10 @@ pub enum ReplyKind {
     GetInputFocus,
     GetGeometry,
     GrabPointer,
+    QueryExtension,
+
+    // TODO: put this behind a feature flag
+    XineramaIsActive,
 }
 
 #[derive(Debug)]

@@ -14,4 +14,7 @@ pub mod window;
 /// keyboard contains keysyms and keycodes for x11
 pub mod keyboard;
 
+/// implementation of popular x11 extensions such as xinerama
+pub mod extension;
+
 

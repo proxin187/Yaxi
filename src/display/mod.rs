@@ -3,6 +3,7 @@ pub(crate) mod auth;
 pub(crate) mod xid;
 pub mod request;
 
+use crate::extension::Extension;
 use crate::proto::*;
 use crate::window::*;
 use crate::keyboard::*;
@@ -264,12 +265,12 @@ impl Roots {
 }
 
 pub struct Display<T> where T: Send + Sync + Read + Write + TryClone {
-    stream: Stream<T>,
-    events: Queue<Event>,
-    replies: Queue<Reply>,
-    roots: Roots,
-    setup: SuccessResponse,
-    sequence: SequenceManager,
+    pub(crate) stream: Stream<T>,
+    pub(crate) events: Queue<Event>,
+    pub(crate) replies: Queue<Reply>,
+    pub(crate) roots: Roots,
+    pub(crate) setup: SuccessResponse,
+    pub(crate) sequence: SequenceManager,
 }
 
 impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
@@ -309,6 +310,26 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
         let screen = self.roots.first()?;
 
         Ok(Window::<T>::new(stream, self.replies.clone(), self.sequence.clone(), self.roots.visual_from_id(screen.response.root_visual)?, screen.response.root_depth, screen.response.root))
+    }
+
+    /// query an extension and if its active get its major opcode
+    pub fn query_extension(&mut self, extension: Extension) -> Result<QueryExtensionResponse, Box<dyn std::error::Error>> {
+        self.sequence.append(ReplyKind::QueryExtension)?;
+
+        self.stream.send_encode(QueryExtension {
+            opcode: Opcode::QUERY_EXTENSION,
+            pad0: 0,
+            length: 2 + (extension.len() as u16 + request::pad(extension.len()) as u16) / 4,
+            name_len: extension.len() as u16,
+            pad1: 0,
+        })?;
+
+        self.stream.send_pad(extension.to_string().as_bytes())?;
+
+        match self.replies.wait()? {
+            Reply::QueryExtension(response) => Ok(response),
+            _ => unreachable!(),
+        }
     }
 
     /// this request returns the current focused window
@@ -538,6 +559,17 @@ impl<T> EventListener<T> where T: Send + Sync + Read + Write + TryClone {
                 let response: QueryPointerResponse = self.stream.recv_decode()?;
 
                 self.replies.push(Reply::QueryPointer(response))?;
+            },
+            ReplyKind::QueryExtension => {
+                let response: QueryExtensionResponse = self.stream.recv_decode()?;
+
+                self.replies.push(Reply::QueryExtension(response))?;
+            },
+            // TODO: put this behind a feature flag
+            ReplyKind::XineramaIsActive => {
+                let response: XineramaIsActiveResponse = self.stream.recv_decode()?;
+
+                self.replies.push(Reply::XineramaIsActive(response))?;
             },
             ReplyKind::GetInputFocus => {
                 let response: GetInputFocusResponse = self.stream.recv_decode()?;
