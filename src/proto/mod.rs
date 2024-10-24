@@ -144,8 +144,13 @@ pub enum Reply {
     GrabPointer(GrabPointerResponse),
     QueryExtension(QueryExtensionResponse),
 
-    // TODO: put this behind a feature flag
+    #[cfg(feature = "xinerama")]
     XineramaIsActive(XineramaIsActiveResponse),
+
+    #[cfg(feature = "xinerama")]
+    XineramaQueryScreens {
+        screens: Vec<XineramaScreenInfo>,
+    },
 
     GetProperty {
         value: Vec<u8>,
@@ -168,8 +173,11 @@ pub enum ReplyKind {
     GrabPointer,
     QueryExtension,
 
-    // TODO: put this behind a feature flag
+    #[cfg(feature = "xinerama")]
     XineramaIsActive,
+
+    #[cfg(feature = "xinerama")]
+    XineramaQueryScreens,
 }
 
 #[derive(Debug)]

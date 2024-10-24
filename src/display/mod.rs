@@ -4,6 +4,10 @@ pub(crate) mod xid;
 pub mod request;
 
 use crate::extension::Extension;
+
+#[cfg(feature = "xinerama")]
+use crate::extension::xinerama::Xinerama;
+
 use crate::proto::*;
 use crate::window::*;
 use crate::keyboard::*;
@@ -306,10 +310,9 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
 
     /// get the default root window of a display
     pub fn default_root_window(&self) -> Result<Window<T>, Box<dyn std::error::Error>> {
-        let stream = self.stream.try_clone()?;
         let screen = self.roots.first()?;
 
-        Ok(Window::<T>::new(stream, self.replies.clone(), self.sequence.clone(), self.roots.visual_from_id(screen.response.root_visual)?, screen.response.root_depth, screen.response.root))
+        Ok(Window::<T>::new(self.stream.clone(), self.replies.clone(), self.sequence.clone(), self.roots.visual_from_id(screen.response.root_visual)?, screen.response.root_depth, screen.response.root))
     }
 
     /// query an extension and if its active get its major opcode
@@ -330,6 +333,15 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
             Reply::QueryExtension(response) => Ok(response),
             _ => unreachable!(),
         }
+    }
+
+    /// query for the xinerama extension and return a structure with its methods
+
+    #[cfg(feature = "xinerama")]
+    pub fn query_xinerama(&mut self) -> Result<Xinerama<T>, Box<dyn std::error::Error>> {
+        let extension = self.query_extension(Extension::Xinerama)?;
+
+        Ok(Xinerama::new(self.stream.clone(), self.replies.clone(), self.sequence.clone(), extension.major_opcode))
     }
 
     /// this request returns the current focused window
@@ -425,6 +437,7 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
             .ok_or(Box::new(Error::InvalidKeysym))
     }
 
+    /// ungrab the pointer
     pub fn ungrab_pointer(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         self.sequence.skip();
 
@@ -565,11 +578,23 @@ impl<T> EventListener<T> where T: Send + Sync + Read + Write + TryClone {
 
                 self.replies.push(Reply::QueryExtension(response))?;
             },
-            // TODO: put this behind a feature flag
+            #[cfg(feature = "xinerama")]
             ReplyKind::XineramaIsActive => {
                 let response: XineramaIsActiveResponse = self.stream.recv_decode()?;
 
                 self.replies.push(Reply::XineramaIsActive(response))?;
+            },
+            #[cfg(feature = "xinerama")]
+            ReplyKind::XineramaQueryScreens => {
+                let response: XineramaQueryScreensResponse = self.stream.recv_decode()?;
+
+                let mut screens: Vec<XineramaScreenInfo> = Vec::new();
+
+                for _ in 0..response.number {
+                    screens.push(self.stream.recv_decode()?);
+                }
+
+                self.replies.push(Reply::XineramaQueryScreens { screens })?;
             },
             ReplyKind::GetInputFocus => {
                 let response: GetInputFocusResponse = self.stream.recv_decode()?;

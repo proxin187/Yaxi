@@ -1,6 +1,8 @@
 //! Here you can find implementations of popular x11 extensions
 
 /// xinerama is an extension for having multi-monitor single-screen x11 sessions
+
+#[cfg(feature = "xinerama")]
 pub mod xinerama;
 
 /// an enum for the supported x11 extensions

@@ -19,4 +19,7 @@ path = "src/lib.rs"
 name = "example"
 path = "src/bin.rs"
 
+[features]
+xinerama = []
+
 [dependencies]

@@ -715,6 +715,31 @@ pub struct XineramaIsActiveResponse {
     pub(crate) pad0: [u32; 5],
 }
 
+#[repr(packed, C)]
+#[derive(Debug, Clone)]
+pub struct XineramaQueryScreens {
+    pub opcode: u8,
+    pub minor: u8,
+    pub length: u16,
+}
+
+#[repr(packed, C)]
+#[derive(Debug, Clone)]
+pub struct XineramaQueryScreensResponse {
+    pub(crate) length: u32,
+    pub number: u32,
+    pub(crate) pad0: [u32; 5],
+}
+
+#[repr(packed, C)]
+#[derive(Debug, Clone, Default)]
+pub struct XineramaScreenInfo {
+    pub x: u16,
+    pub y: u16,
+    pub width: u16,
+    pub height: u16,
+}
+
 pub fn encode<T>(ptr: &T) -> &[u8] {
     unsafe {
         slice::from_raw_parts((ptr as *const T) as *const u8, mem::size_of::<T>())

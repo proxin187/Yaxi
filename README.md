@@ -24,7 +24,7 @@
 - [X] Requests and Replies
 - [X] events (most)
 - [X] Keycodes and Keysyms
-- [ ] Extensions (Xinerama, Xft, ...)
+- [X] Extensions (Xinerama, Xft, ...) (Only Xinerama Implemented So Far)
 - [ ] Comprehensive Documentation
 - [ ] Window Manager in yaxi (work in progress)
 
