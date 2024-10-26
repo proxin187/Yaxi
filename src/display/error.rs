@@ -1,3 +1,4 @@
+use super::ErrorCode;
 
 
 pub enum Error {
@@ -10,12 +11,19 @@ pub enum Error {
     RanOutOfXid,
     NoScreens,
     NoReply,
+    FailedToLock,
     SetupFailed {
         reason: String,
     },
     Event {
-        detail: u8,
+        error: ErrorCode,
+        major_opcode: u8,
+        minor_opcode: u16,
+        bad_value: u32,
         sequence: u16,
+    },
+    Other {
+        error: Box<dyn std::error::Error + Send + Sync>,
     },
 }
 
@@ -55,11 +63,17 @@ impl std::fmt::Display for Error {
             Error::NoReply => {
                 f.write_str("reply queue empty")
             },
+            Error::FailedToLock => {
+                f.write_str("failed to lock mutex")
+            },
             Error::SetupFailed { reason } => {
                 f.write_fmt(format_args!("connection initiation setup failed: {}", reason))
             },
-            Error::Event { detail, sequence } => {
-                f.write_fmt(format_args!("[error event] detail={}, sequence={}", detail, sequence))
+            Error::Event { error, major_opcode, minor_opcode, bad_value, sequence } => {
+                f.write_fmt(format_args!("error={:?}, major_opcode={}, minor_opcode={}, bad_value={}, sequence={}", error, major_opcode, minor_opcode, bad_value, sequence))
+            },
+            Error::Other { error } => {
+                f.write_fmt(format_args!("other: {}", error))
             },
         }
     }

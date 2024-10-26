@@ -25,6 +25,7 @@
 - [X] events (most)
 - [X] Keycodes and Keysyms
 - [X] Extensions (Xinerama, Xft, ...) (Only Xinerama Implemented So Far)
+- [X] Selections(clipboard) Support (Implemented but still may be some bugs)
 - [ ] Comprehensive Documentation
 - [ ] Window Manager in yaxi (work in progress)
 

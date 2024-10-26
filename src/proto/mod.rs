@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 
 macro_rules! lock {
     ($mutex:expr) => {
-        $mutex.lock().map_err(|_| Into::<Box<dyn std::error::Error>>::into("failed to lock mutex"))
+        $mutex.lock().map_err(|_| Error::FailedToLock)
     }
 }
 
@@ -66,6 +66,9 @@ impl Opcode {
     pub const DELETE_PROPERTY: u8 = 19;
     pub const GET_PROPERTY: u8 = 20;
     pub const GRAB_POINTER: u8 = 26;
+    pub const SET_SELECTION_OWNER: u8 = 22;
+    pub const GET_SELECTION_OWNER: u8 = 23;
+    pub const CONVERT_SELECTION: u8 = 24;
     pub const UNGRAB_POINTER: u8 = 27;
     pub const GRAB_BUTTON: u8 = 28;
     pub const UNGRAB_BUTTON: u8 = 29;
@@ -78,59 +81,96 @@ impl Opcode {
     pub const KILL_CLIENT: u8 = 113;
 }
 
-#[non_exhaustive]
-pub struct ErrorCode;
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd)]
+pub enum ErrorCode {
+    Request,
+    Value,
+    Window,
+    Pixmap,
+    Atom,
+    Cursor,
+    Font,
+    Match,
+    Drawable,
+    Access,
+    Alloc,
+    Colormap,
+    GContext,
+    IdChoice,
+    Name,
+    Length,
+    Implementation,
+    Unknown,
+}
 
-impl ErrorCode {
-    pub const REQUEST: u8 = 1;
-    pub const VALUE: u8 = 2;
-    pub const WINDOW: u8 = 3;
-    pub const PIXMAP: u8 = 4;
-    pub const ATOM: u8 = 5;
-    pub const CURSOR: u8 = 6;
-    pub const FONT: u8 = 7;
-    pub const MATCH: u8 = 8;
-    pub const DRAWABLE: u8 = 9;
-    pub const ACCESS: u8 = 10;
-    pub const ALLOC: u8 = 11;
-    pub const COLORMAP: u8 = 12;
-    pub const G_CONTEXT: u8 = 13;
-    pub const ID_CHOICE: u8 = 14;
-    pub const NAME: u8 = 15;
-    pub const LENGTH: u8 = 16;
-    pub const IMPLEMENTATION: u8 = 17;
+impl From<u8> for ErrorCode {
+    fn from(value: u8) -> ErrorCode {
+        match value {
+            1 => ErrorCode::Request,
+            2 => ErrorCode::Value,
+            3 => ErrorCode::Window,
+            4 => ErrorCode::Pixmap,
+            5 => ErrorCode::Atom,
+            6 => ErrorCode::Cursor,
+            7 => ErrorCode::Font,
+            8 => ErrorCode::Match,
+            9 => ErrorCode::Drawable,
+            10 => ErrorCode::Access,
+            11 => ErrorCode::Alloc,
+            12 => ErrorCode::Colormap,
+            13 => ErrorCode::GContext,
+            14 => ErrorCode::IdChoice,
+            15 => ErrorCode::Name,
+            16 => ErrorCode::Length,
+            17 => ErrorCode::Implementation,
+            _ => ErrorCode::Unknown,
+        }
+    }
 }
 
 #[derive(Clone)]
 pub struct Queue<T> {
     queue: Arc<Mutex<Vec<T>>>,
+    errors: Arc<Mutex<Vec<Error>>>,
 }
 
 impl<T> Queue<T> {
-    pub fn new() -> Queue<T> {
+    pub fn new(errors: Arc<Mutex<Vec<Error>>>) -> Queue<T> {
         Queue {
             queue: Arc::new(Mutex::new(Vec::new())),
+            errors,
         }
     }
 
     pub fn clone(&self) -> Queue<T> {
         Queue {
             queue: self.queue.clone(),
+            errors: self.errors.clone(),
         }
     }
 
-    pub fn poll(&mut self) -> Result<bool, Box<dyn std::error::Error>> {
+    pub fn poll(&mut self) -> Result<bool, Error> {
+        self.poll_error()?;
+
         Ok(!lock!(self.queue)?.is_empty())
     }
 
-    pub fn wait(&mut self) -> Result<T, Box<dyn std::error::Error>> {
+    pub fn wait(&mut self) -> Result<T, Error> {
         while !self.poll()? {}
 
-        lock!(self.queue)?.pop().ok_or(Box::new(Error::NoReply))
+        lock!(self.queue)?.pop().ok_or(Error::NoReply)
     }
 
-    pub fn push(&mut self, element: T) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn push(&mut self, element: T) -> Result<(), Error> {
         lock!(self.queue).map(|mut lock| lock.push(element))
+    }
+
+    pub fn push_error(&mut self, error: Error) -> Result<(), Error> {
+        lock!(self.errors).map(|mut lock| lock.push(error))
+    }
+
+    pub fn poll_error(&mut self) -> Result<(), Error> {
+        lock!(self.errors)?.pop().map_or(Ok(()), |error| Err(error))
     }
 }
 
@@ -143,6 +183,7 @@ pub enum Reply {
     GetInputFocus(GetInputFocusResponse),
     GrabPointer(GrabPointerResponse),
     QueryExtension(QueryExtensionResponse),
+    GetSelectionOwner(GetSelectionOwnerResponse),
 
     #[cfg(feature = "xinerama")]
     XineramaIsActive(XineramaIsActiveResponse),
@@ -172,6 +213,7 @@ pub enum ReplyKind {
     GetGeometry,
     GrabPointer,
     QueryExtension,
+    GetSelectionOwner,
 
     #[cfg(feature = "xinerama")]
     XineramaIsActive,
@@ -209,12 +251,12 @@ impl SequenceManager {
         }
     }
 
-    pub fn get(&mut self, id: u16) -> Result<Sequence, Box<dyn std::error::Error>> {
+    pub fn get(&mut self, id: u16) -> Result<Sequence, Error> {
         let mut lock = lock!(self.sequences)?;
 
         match lock.iter().position(|sequence| sequence.id == id) {
             Some(index) => Ok(lock.remove(index)),
-            None => Err(Box::new(Error::InvalidId)),
+            None => Err(Error::InvalidId),
         }
     }
 
@@ -222,7 +264,7 @@ impl SequenceManager {
         self.id.fetch_add(1, Ordering::Relaxed);
     }
 
-    pub fn append(&mut self, kind: ReplyKind) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn append(&mut self, kind: ReplyKind) -> Result<(), Error> {
         self.skip();
 
         lock!(self.sequences)?.push(Sequence::new(self.id.load(Ordering::Relaxed), kind));

@@ -1,0 +1,19 @@
+[package]
+name = "clipboard"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "owners"
+path = "src/owners.rs"
+
+[[bin]]
+name = "copy"
+path = "src/copy.rs"
+
+[[bin]]
+name = "paste"
+path = "src/paste.rs"
+
+[dependencies]
+yaxi = { path = "../.." }

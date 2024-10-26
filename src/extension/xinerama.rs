@@ -31,7 +31,7 @@ impl<T> Xinerama<T> where T: Send + Sync + Read + Write + TryClone {
     }
 
     /// query the screens and return them in a vector
-    pub fn query_screens(&mut self) -> Result<Vec<XineramaScreenInfo>, Box<dyn std::error::Error>> {
+    pub fn query_screens(&mut self) -> Result<Vec<XineramaScreenInfo>, Error> {
         self.sequence.append(ReplyKind::XineramaQueryScreens)?;
 
         self.stream.send_encode(XineramaQueryScreens {
@@ -47,7 +47,7 @@ impl<T> Xinerama<T> where T: Send + Sync + Read + Write + TryClone {
     }
 
     /// returns true if xinerama is active
-    pub fn is_active(&mut self) -> Result<bool, Box<dyn std::error::Error>> {
+    pub fn is_active(&mut self) -> Result<bool, Error> {
         self.sequence.append(ReplyKind::XineramaIsActive)?;
 
         self.stream.send_encode(XineramaIsActive {

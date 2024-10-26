@@ -1,4 +1,5 @@
 use crate::display::request::{self, *};
+use crate::display::error::Error;
 use crate::display::{Atom, Visual, Roots, Stream, TryClone};
 use crate::display::xid;
 use crate::proto::*;
@@ -26,7 +27,7 @@ impl<T> ValuesBuilder<T> where T: ValueMask {
 
     pub(crate) fn len(&self) -> u16 { self.values.len() as u16 }
 
-    pub(crate) fn build(&mut self) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    pub(crate) fn build(&mut self) -> Vec<u8> {
         self.values.sort_by(|a, b| a.mask().partial_cmp(&b.mask()).unwrap());
 
         for value in &self.values {
@@ -37,7 +38,7 @@ impl<T> ValuesBuilder<T> where T: ValueMask {
             assert!(self.request.len() % 4 == 0);
         }
 
-        Ok(self.request.clone())
+        self.request.clone()
     }
 }
 
@@ -221,7 +222,7 @@ pub struct Window<T: Send + Sync + Read + Write + TryClone> {
 }
 
 impl<T> TryClone for Window<T> where T: Send + Sync + Read + Write + TryClone {
-    fn try_clone(&self) -> Result<Box<Self>, Box<dyn std::error::Error>> {
+    fn try_clone(&self) -> Result<Box<Self>, Error> {
         Ok(Box::new(Window {
             stream: self.stream.try_clone()?,
             replies: self.replies.clone(),
@@ -251,7 +252,7 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
         mut sequence: SequenceManager,
         roots: Roots,
         id: u32
-    ) -> Result<Window<T>, Box<dyn std::error::Error>> {
+    ) -> Result<Window<T>, Error> {
         sequence.append(ReplyKind::GetWindowAttributes)?;
 
         let screen = roots.first()?;
@@ -279,7 +280,7 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
     }
 
     /// get the window attributes
-    pub fn get_window_attributes(&mut self) -> Result<GetWindowAttributesResponse, Box<dyn std::error::Error>> {
+    pub fn get_window_attributes(&mut self) -> Result<GetWindowAttributesResponse, Error> {
         self.sequence.append(ReplyKind::GetWindowAttributes)?;
 
         self.stream.send_encode(GetWindowAttributes {
@@ -296,7 +297,7 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
     }
 
     /// get the geometry of the window
-    pub fn get_geometry(&mut self) -> Result<GetGeometryResponse, Box<dyn std::error::Error>> {
+    pub fn get_geometry(&mut self) -> Result<GetGeometryResponse, Error> {
         self.sequence.append(ReplyKind::GetGeometry)?;
 
         self.stream.send_encode(GetGeometry {
@@ -312,7 +313,45 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
         }
     }
 
-    fn generic_window(&mut self, opcode: u8, length: u16) -> Result<(), Box<dyn std::error::Error>> {
+    // TODO: un-hardcode current-time
+
+    /// set the window to the selection owner
+    pub fn set_selection_owner(&mut self, selection: Atom) -> Result<(), Error> {
+        self.sequence.skip();
+
+        self.stream.send_encode(SetSelectionOwner {
+            opcode: Opcode::SET_SELECTION_OWNER,
+            pad0: 0,
+            length: 4,
+            owner: self.id(),
+            selection: selection.id(),
+            time: 0,
+        })?;
+
+        self.replies.poll_error()
+    }
+
+    // TODO: un-hardcode current-time
+
+    /// sends a selection request to the owner
+    pub fn convert_selection(&mut self, selection: Atom, target: Atom, property: Atom) -> Result<(), Error> {
+        self.sequence.skip();
+
+        self.stream.send_encode(ConvertSelection {
+            opcode: Opcode::CONVERT_SELECTION,
+            pad0: 0,
+            length: 6,
+            requestor: self.id(),
+            selection: selection.id(),
+            target: target.id(),
+            property: property.id(),
+            time: 0,
+        })?;
+
+        self.replies.poll_error()
+    }
+
+    fn generic_window(&mut self, opcode: u8, length: u16) -> Result<(), Error> {
         self.sequence.skip();
 
         self.stream.send_encode(GenericWindow {
@@ -322,7 +361,7 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
             wid: self.id(),
         })?;
 
-        Ok(())
+        self.replies.poll_error()
     }
 
     /// window id
@@ -335,10 +374,10 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
     pub fn visual(&self) -> Visual { self.visual.clone() }
 
     /// create a child window with provided window arguments
-    pub fn create_window(&mut self, mut window: WindowArguments) -> Result<Window<T>, Box<dyn std::error::Error>> {
+    pub fn create_window(&mut self, mut window: WindowArguments) -> Result<Window<T>, Error> {
         self.sequence.skip();
 
-        let window_values_request = window.values.build()?;
+        let window_values_request = window.values.build();
         let wid = xid::next()?;
 
         self.stream.send_encode(CreateWindow {
@@ -359,11 +398,13 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
 
         self.stream.send(&window_values_request)?;
 
+        self.replies.poll_error()?;
+
         Ok(Window::new(self.stream.try_clone()?, self.replies.clone(), self.sequence.clone(), window.visual, window.depth, wid))
     }
 
     /// kill the window
-    pub fn kill(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn kill(&mut self) -> Result<(), Error> {
         self.sequence.skip();
 
         self.stream.send_encode(KillClient {
@@ -373,11 +414,11 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
             resource: self.id(),
         })?;
 
-        Ok(())
+        self.replies.poll_error()
     }
 
     /// sets the current input focus to the window
-    pub fn set_input_focus(&mut self, revert_to: RevertTo) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn set_input_focus(&mut self, revert_to: RevertTo) -> Result<(), Error> {
         self.sequence.skip();
 
         self.stream.send_encode(SetInputFocus {
@@ -388,14 +429,14 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
             time: 0,
         })?;
 
-        Ok(())
+        self.replies.poll_error()
     }
 
     /// change the attributes of a window
-    pub fn change_attributes(&mut self, mut values: ValuesBuilder<WindowValue>) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn change_attributes(&mut self, mut values: ValuesBuilder<WindowValue>) -> Result<(), Error> {
         self.sequence.skip();
 
-        let request = values.build()?;
+        let request = values.build();
 
         self.stream.send_encode(ChangeWindowAttributes {
             opcode: Opcode::CHANGE_WINDOW_ATTRIBUTES,
@@ -407,14 +448,14 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
 
         self.stream.send(&request)?;
 
-        Ok(())
+        self.replies.poll_error()
     }
 
     /// configure the window
-    pub fn configure(&mut self, mut values: ValuesBuilder<ConfigureValue<T>>) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn configure(&mut self, mut values: ValuesBuilder<ConfigureValue<T>>) -> Result<(), Error> {
         self.sequence.skip();
 
-        let request = values.build()?;
+        let request = values.build();
 
         self.stream.send_encode(ConfigureWindow {
             opcode: Opcode::CONFIGURE_WINDOW,
@@ -427,53 +468,53 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
 
         self.stream.send(&request)?;
 
-        Ok(())
+        self.replies.poll_error()
     }
 
     /// set the border of a window to a pixel
-    pub fn set_border_pixel(&mut self, pixel: u32) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn set_border_pixel(&mut self, pixel: u32) -> Result<(), Error> {
         self.change_attributes(ValuesBuilder::new(vec![WindowValue::BorderPixel(pixel)]))
     }
 
     /// set the border width of a window
-    pub fn set_border_width(&mut self, width: u16) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn set_border_width(&mut self, width: u16) -> Result<(), Error> {
         self.configure(ValuesBuilder::new(vec![ConfigureValue::Border(width)]))
     }
 
     /// move a window, this is a fancy wrapper for configure
-    pub fn mov(&mut self, x: u16, y: u16) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn mov(&mut self, x: u16, y: u16) -> Result<(), Error> {
         self.configure(ValuesBuilder::new(vec![ConfigureValue::X(x), ConfigureValue::Y(y)]))
     }
 
     /// resize a window, this is a fancy wrapper for configure
-    pub fn resize(&mut self, width: u16, height: u16) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn resize(&mut self, width: u16, height: u16) -> Result<(), Error> {
         self.configure(ValuesBuilder::new(vec![ConfigureValue::Width(width), ConfigureValue::Height(height)]))
     }
 
     /// move and resize a window, this is a fancy wrapper for configure
-    pub fn mov_resize(&mut self, x: u16, y: u16, width: u16, height: u16) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn mov_resize(&mut self, x: u16, y: u16, width: u16, height: u16) -> Result<(), Error> {
         self.mov(x, y)?;
 
         self.resize(width, height)
     }
 
     /// choose the events you want to recieve
-    pub fn select_input(&mut self, events: &[EventMask]) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn select_input(&mut self, events: &[EventMask]) -> Result<(), Error> {
         self.change_attributes(ValuesBuilder::new(vec![WindowValue::EventMask(events.to_vec())]))
     }
 
     /// raise the window to the top of the stack
-    pub fn raise(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn raise(&mut self) -> Result<(), Error> {
         self.configure(ValuesBuilder::new(vec![ConfigureValue::StackMode(StackMode::Above)]))
     }
 
     /// lower the window to the bottom of the stack
-    pub fn lower(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn lower(&mut self) -> Result<(), Error> {
         self.configure(ValuesBuilder::new(vec![ConfigureValue::StackMode(StackMode::Below)]))
     }
 
     /// become the child of a parent window
-    pub fn reparent(&mut self, parent: Window<T>, x: u16, y: u16) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn reparent(&mut self, parent: Window<T>, x: u16, y: u16) -> Result<(), Error> {
         self.sequence.skip();
 
         self.stream.send_encode(ReparentWindow {
@@ -484,21 +525,23 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
             parent: parent.id(),
             x,
             y,
-        })
+        })?;
+
+        self.replies.poll_error()
     }
 
     /// destroy the current window object
-    pub fn destroy(mut self, kind: WindowKind) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn destroy(mut self, kind: WindowKind) -> Result<(), Error> {
         self.generic_window(kind.encode(Opcode::DESTROY_SUBWINDOWS, Opcode::DESTROY_WINDOW), 2)
     }
 
     /// map the window onto the screen
-    pub fn map(&mut self, kind: WindowKind) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn map(&mut self, kind: WindowKind) -> Result<(), Error> {
         self.generic_window(kind.encode(Opcode::MAP_SUBWINDOWS, Opcode::MAP_WINDOW), 2)
     }
 
     /// unmap the window
-    pub fn unmap(&mut self, kind: WindowKind) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn unmap(&mut self, kind: WindowKind) -> Result<(), Error> {
         self.generic_window(kind.encode(Opcode::UNMAP_SUBWINDOWS, Opcode::UNMAP_WINDOW), 2)
     }
 
@@ -510,7 +553,7 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
         format: PropFormat,
         mode: PropMode,
         data: &[u8]
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Result<(), Error> {
         self.sequence.skip();
 
         let request = ChangeProperty {
@@ -529,20 +572,20 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
 
         self.stream.send_pad(data)?;
 
-        Ok(())
+        self.replies.poll_error()
     }
 
     /// delete a property from a window
-    pub fn delete_property(&mut self, property: Atom) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn delete_property(&mut self, property: Atom) -> Result<(), Error> {
         self.generic_window(Opcode::DELETE_PROPERTY, 3)?;
 
         self.stream.send_encode(property.id())?;
 
-        Ok(())
+        self.replies.poll_error()
     }
 
     /// get the value of a property from a window
-    pub fn get_property(&mut self, property: Atom, type_: Atom, delete: bool) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    pub fn get_property(&mut self, property: Atom, type_: Atom, delete: bool) -> Result<Vec<u8>, Error> {
         self.sequence.append(ReplyKind::GetProperty)?;
 
         self.stream.send_encode(GetProperty {
@@ -563,7 +606,7 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
     }
 
     /// get info about the pointer such as position
-    pub fn query_pointer(&mut self) -> Result<QueryPointerResponse, Box<dyn std::error::Error>> {
+    pub fn query_pointer(&mut self) -> Result<QueryPointerResponse, Error> {
         self.sequence.append(ReplyKind::QueryPointer)?;
 
         self.stream.send_encode(QueryPointer {
@@ -588,7 +631,7 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
         pointer_mode: PointerMode,
         keyboard_mode: KeyboardMode,
         owner_events: bool,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Result<(), Error> {
         self.sequence.skip();
 
         self.stream.send_encode(GrabKey {
@@ -603,7 +646,7 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
             pad0: [0u8; 3],
         })?;
 
-        Ok(())
+        self.replies.poll_error()
     }
 
     /// grab a button from the window,
@@ -618,7 +661,7 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
         keyboard_mode: KeyboardMode,
         owner_events: bool,
         confine_to: u32,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Result<(), Error> {
         self.sequence.skip();
 
         self.stream.send_encode(GrabButton {
@@ -636,12 +679,12 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
             modifiers: modifiers.iter().fold(0, |acc, modifier| acc | *modifier as u16),
         })?;
 
-        Ok(())
+        self.replies.poll_error()
     }
 
     /// ungrab a button from the window,
     /// buttons are not valid modifiers
-    pub fn ungrab_button(&mut self, button: Button, modifiers: Vec<KeyMask>) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn ungrab_button(&mut self, button: Button, modifiers: Vec<KeyMask>) -> Result<(), Error> {
         self.sequence.skip();
 
         self.stream.send_encode(UngrabButton {
@@ -653,7 +696,7 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
             pad0: [0u8; 2],
         })?;
 
-        Ok(())
+        self.replies.poll_error()
     }
 
     /// grab the pointer
@@ -665,7 +708,7 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
         keyboard_mode: KeyboardMode,
         owner_events: bool,
         confine_to: u32,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Result<(), Error> {
         self.sequence.append(ReplyKind::GrabPointer)?;
 
         // TODO: un-hardcode time as current time

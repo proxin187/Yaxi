@@ -1,4 +1,4 @@
-use super::Stream;
+use super::{Stream, Error};
 
 use std::fs::File;
 use std::env;
@@ -30,7 +30,7 @@ impl XAuth {
         })
     }
 
-    fn value(&mut self) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    fn value(&mut self) -> Result<Vec<u8>, Error> {
         let size = self.file.recv(mem::size_of::<u16>())?;
 
         self.file.recv(((size[0] as u16) << 8 | size[1] as u16) as usize)

@@ -740,6 +740,47 @@ pub struct XineramaScreenInfo {
     pub height: u16,
 }
 
+#[repr(packed, C)]
+#[derive(Debug, Clone)]
+pub struct SetSelectionOwner {
+    pub opcode: u8,
+    pub pad0: u8,
+    pub length: u16,
+    pub owner: u32,
+    pub selection: u32,
+    pub time: u32,
+}
+
+#[repr(packed, C)]
+#[derive(Debug, Clone)]
+pub struct GetSelectionOwner {
+    pub opcode: u8,
+    pub pad0: u8,
+    pub length: u16,
+    pub selection: u32,
+}
+
+#[repr(packed, C)]
+#[derive(Debug, Clone)]
+pub struct GetSelectionOwnerResponse {
+    pub length: u32,
+    pub owner: u32,
+    pub pad0: [u8; 20],
+}
+
+#[repr(packed, C)]
+#[derive(Debug, Clone)]
+pub struct ConvertSelection {
+    pub opcode: u8,
+    pub pad0: u8,
+    pub length: u16,
+    pub requestor: u32,
+    pub selection: u32,
+    pub target: u32,
+    pub property: u32,
+    pub time: u32,
+}
+
 pub fn encode<T>(ptr: &T) -> &[u8] {
     unsafe {
         slice::from_raw_parts((ptr as *const T) as *const u8, mem::size_of::<T>())

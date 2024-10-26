@@ -6,7 +6,7 @@ static XID: Mutex<Xid> = Mutex::new(Xid::new());
 
 macro_rules! lock {
     ($mutex:expr) => {
-        $mutex.lock().map_err(|_| Into::<Box<dyn std::error::Error>>::into("failed to lock mutex"))
+        $mutex.lock().map_err(|_| Error::FailedToLock)
     }
 }
 
@@ -25,18 +25,18 @@ impl Xid {
         }
     }
 
-    fn next(&mut self) -> Result<u32, Box<dyn std::error::Error>> {
+    fn next(&mut self) -> Result<u32, Error> {
         self.next += 1;
 
         if self.next >= self.mask {
-            Err(Box::new(Error::RanOutOfXid))
+            Err(Error::RanOutOfXid)
         } else {
             Ok(self.next | self.base)
         }
     }
 }
 
-pub fn setup(base: u32, mask: u32) -> Result<(), Box<dyn std::error::Error>> {
+pub fn setup(base: u32, mask: u32) -> Result<(), Error> {
     let mut lock = lock!(XID)?;
 
     lock.base = base;
@@ -45,7 +45,7 @@ pub fn setup(base: u32, mask: u32) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-pub fn next() -> Result<u32, Box<dyn std::error::Error>> {
+pub fn next() -> Result<u32, Error> {
     lock!(XID)?.next()
 }
 

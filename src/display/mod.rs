@@ -18,6 +18,7 @@ use error::Error;
 use std::os::unix::net::UnixStream;
 use std::net::{SocketAddr, TcpStream};
 use std::io::{Read, Write};
+use std::sync::{Arc, Mutex};
 use std::fs::File;
 use std::thread;
 
@@ -29,30 +30,30 @@ const X_PROTOCOL: u16 = 11;
 const X_PROTOCOL_REVISION: u16 = 0;
 
 pub trait TryClone {
-    fn try_clone(&self) -> Result<Box<Self>, Box<dyn std::error::Error>>;
+    fn try_clone(&self) -> Result<Box<Self>, Error>;
 }
 
 impl TryClone for File {
-    fn try_clone(&self) -> Result<Box<File>, Box<dyn std::error::Error>> {
+    fn try_clone(&self) -> Result<Box<File>, Error> {
         self.try_clone()
             .map(|stream| Box::new(stream))
-            .map_err(|err| err.into())
+            .map_err(|err| Error::Other { error: err.into() })
     }
 }
 
 impl TryClone for TcpStream {
-    fn try_clone(&self) -> Result<Box<TcpStream>, Box<dyn std::error::Error>> {
+    fn try_clone(&self) -> Result<Box<TcpStream>, Error> {
         self.try_clone()
             .map(|stream| Box::new(stream))
-            .map_err(|err| err.into())
+            .map_err(|err| Error::Other { error: err.into() })
     }
 }
 
 impl TryClone for UnixStream {
-    fn try_clone(&self) -> Result<Box<UnixStream>, Box<dyn std::error::Error>> {
+    fn try_clone(&self) -> Result<Box<UnixStream>, Error> {
         self.try_clone()
             .map(|stream| Box::new(stream))
-            .map_err(|err| err.into())
+            .map_err(|err| Error::Other { error: err.into() })
     }
 }
 
@@ -73,17 +74,17 @@ impl<T> Stream<T> where T: Send + Sync + Read + Write + TryClone {
         }
     }
 
-    pub fn try_clone(&self) -> Result<Stream<T>, Box<dyn std::error::Error>> {
+    pub fn try_clone(&self) -> Result<Stream<T>, Error> {
         Ok(Stream {
             inner: self.inner.try_clone()?,
         })
     }
 
-    pub fn send(&mut self, request: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
-        self.inner.write_all(request).map_err(|err| err.into())
+    pub fn send(&mut self, request: &[u8]) -> Result<(), Error> {
+        self.inner.write_all(request).map_err(|err| Error::Other { error: err.into() })
     }
 
-    pub fn send_arr(&mut self, requests: &[Vec<u8>]) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn send_arr(&mut self, requests: &[Vec<u8>]) -> Result<(), Error> {
         for request in requests {
             self.send(request)?;
         }
@@ -91,7 +92,7 @@ impl<T> Stream<T> where T: Send + Sync + Read + Write + TryClone {
         Ok(())
     }
 
-    pub fn send_pad(&mut self, request: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn send_pad(&mut self, request: &[u8]) -> Result<(), Error> {
         self.send(request)?;
 
         self.send(&vec![0u8; request::pad(request.len())])?;
@@ -99,16 +100,16 @@ impl<T> Stream<T> where T: Send + Sync + Read + Write + TryClone {
         Ok(())
     }
 
-    pub fn send_encode<E>(&mut self, object: E) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn send_encode<E>(&mut self, object: E) -> Result<(), Error> {
         self.send(request::encode(&object))
     }
 
-    pub fn recv(&mut self, size: usize) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    pub fn recv(&mut self, size: usize) -> Result<Vec<u8>, Error> {
         let mut buffer = vec![0u8; size];
 
         match self.inner.read_exact(&mut buffer) {
             Ok(()) => Ok(buffer),
-            Err(err) => Err(err.into()),
+            Err(err) => Err(Error::Other { error: err.into() }),
         }
     }
 
@@ -120,7 +121,7 @@ impl<T> Stream<T> where T: Send + Sync + Read + Write + TryClone {
         Ok(String::from_utf8(bytes)?)
     }
 
-    pub fn recv_decode<R>(&mut self) -> Result<R, Box<dyn std::error::Error>> {
+    pub fn recv_decode<R>(&mut self) -> Result<R, Error> {
         let bytes = self.recv(std::mem::size_of::<R>())?;
 
         Ok(request::decode(&bytes))
@@ -246,11 +247,11 @@ impl Roots {
         }
     }
 
-    pub fn first(&self) -> Result<&Screen, Box<dyn std::error::Error>> {
-        self.roots.first().ok_or(Box::new(Error::NoScreens))
+    pub fn first(&self) -> Result<&Screen, Error> {
+        self.roots.first().ok_or(Error::NoScreens)
     }
 
-    pub fn visual_from_id(&self, id: u32) -> Result<Visual, Box<dyn std::error::Error>> {
+    pub fn visual_from_id(&self, id: u32) -> Result<Visual, Error> {
         for screen in &self.roots {
             for depth in &screen.depths {
                 match depth.visuals.iter().find(|visual| visual.id == id) {
@@ -260,7 +261,7 @@ impl Roots {
             }
         }
 
-        Err(Box::new(Error::InvalidId))
+        Err(Error::InvalidId)
     }
 
     pub fn push(&mut self, screen: Screen) {
@@ -279,10 +280,12 @@ pub struct Display<T> where T: Send + Sync + Read + Write + TryClone {
 
 impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
     pub fn connect<'a>(inner: T) -> Result<Display<T>, Box<dyn std::error::Error>> {
+        let errors: Arc<Mutex<Vec<Error>>> = Arc::new(Mutex::new(Vec::new()));
+
         let mut display = Display {
             stream: Stream::new(inner),
-            events: Queue::new(),
-            replies: Queue::new(),
+            events: Queue::new(errors.clone()),
+            replies: Queue::new(errors.clone()),
             roots: Roots::new(),
             setup: SuccessResponse::default(),
             sequence: SequenceManager::new(),
@@ -294,29 +297,29 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
     }
 
     /// wait for the next event
-    pub fn next_event(&mut self) -> Result<Event, Box<dyn std::error::Error>> {
+    pub fn next_event(&mut self) -> Result<Event, Error> {
         self.events.wait()
     }
 
     /// returns true if an event is ready
-    pub fn poll_event(&mut self) -> Result<bool, Box<dyn std::error::Error>> {
+    pub fn poll_event(&mut self) -> Result<bool, Error> {
         self.events.poll()
     }
 
     /// get the window from its id
-    pub fn window_from_id(&self, id: u32) -> Result<Window<T>, Box<dyn std::error::Error>> {
+    pub fn window_from_id(&self, id: u32) -> Result<Window<T>, Error> {
         Window::from_id(self.stream.clone(), self.replies.clone(), self.sequence.clone(), self.roots.clone(), id)
     }
 
     /// get the default root window of a display
-    pub fn default_root_window(&self) -> Result<Window<T>, Box<dyn std::error::Error>> {
+    pub fn default_root_window(&self) -> Result<Window<T>, Error> {
         let screen = self.roots.first()?;
 
         Ok(Window::<T>::new(self.stream.clone(), self.replies.clone(), self.sequence.clone(), self.roots.visual_from_id(screen.response.root_visual)?, screen.response.root_depth, screen.response.root))
     }
 
     /// query an extension and if its active get its major opcode
-    pub fn query_extension(&mut self, extension: Extension) -> Result<QueryExtensionResponse, Box<dyn std::error::Error>> {
+    pub fn query_extension(&mut self, extension: Extension) -> Result<QueryExtensionResponse, Error> {
         self.sequence.append(ReplyKind::QueryExtension)?;
 
         self.stream.send_encode(QueryExtension {
@@ -338,14 +341,14 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
     /// query for the xinerama extension and return a structure with its methods
 
     #[cfg(feature = "xinerama")]
-    pub fn query_xinerama(&mut self) -> Result<Xinerama<T>, Box<dyn std::error::Error>> {
+    pub fn query_xinerama(&mut self) -> Result<Xinerama<T>, Error> {
         let extension = self.query_extension(Extension::Xinerama)?;
 
         Ok(Xinerama::new(self.stream.clone(), self.replies.clone(), self.sequence.clone(), extension.major_opcode))
     }
 
     /// this request returns the current focused window
-    pub fn get_input_focus(&mut self) -> Result<GetInputFocusResponse, Box<dyn std::error::Error>> {
+    pub fn get_input_focus(&mut self) -> Result<GetInputFocusResponse, Error> {
         self.sequence.append(ReplyKind::GetInputFocus)?;
 
         self.stream.send_encode(GetInputFocus {
@@ -361,7 +364,7 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
     }
 
     /// get an atom from its name
-    pub fn intern_atom<'a>(&mut self, name: &'a str, only_if_exists: bool) -> Result<Atom, Box<dyn std::error::Error>> {
+    pub fn intern_atom<'a>(&mut self, name: &'a str, only_if_exists: bool) -> Result<Atom, Error> {
         self.sequence.append(ReplyKind::InternAtom)?;
 
         let request = InternAtom {
@@ -378,9 +381,27 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
 
         match self.replies.wait()? {
             Reply::InternAtom(response) => match response.atom {
-                u32::MIN => Err(Box::new(Error::InvalidAtom)),
+                u32::MIN => Err(Error::InvalidAtom),
                 _ => Ok(Atom::new(response.atom)),
             },
+            _ => unreachable!(),
+        }
+    }
+
+    /// get the owner of a selection, (this function returns the window id, use
+    /// display::window_from_id to get the structure)
+    pub fn get_selection_owner(&mut self, selection: Atom) -> Result<u32, Error> {
+        self.sequence.append(ReplyKind::GetSelectionOwner)?;
+
+        self.stream.send_encode(GetSelectionOwner {
+            opcode: Opcode::GET_SELECTION_OWNER,
+            pad0: 0,
+            length: 2,
+            selection: selection.id(),
+        })?;
+
+        match self.replies.wait()? {
+            Reply::GetSelectionOwner(response) => Ok(response.owner),
             _ => unreachable!(),
         }
     }
@@ -391,7 +412,7 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
     }
 
     /// get the keyboard mapping from the server
-    pub fn get_keyboard_mapping(&mut self) -> Result<(Vec<Keysym>, u8), Box<dyn std::error::Error>> {
+    pub fn get_keyboard_mapping(&mut self) -> Result<(Vec<Keysym>, u8), Error> {
         self.sequence.append(ReplyKind::GetKeyboardMapping)?;
 
         self.stream.send_encode(GetKeyboardMapping {
@@ -410,38 +431,38 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
     }
 
     /// get the keysym from a keycode
-    pub fn keysym_from_keycode(&mut self, keycode: u8) -> Result<Keysym, Box<dyn std::error::Error>> {
+    pub fn keysym_from_keycode(&mut self, keycode: u8) -> Result<Keysym, Error> {
         let (keysyms, keysyms_per_keycode) = self.get_keyboard_mapping()?;
 
         Ok(keysyms[(keycode - self.setup.min_keycode) as usize * keysyms_per_keycode as usize])
     }
 
     /// get the keysym from a character
-    pub fn keysym_from_character(&mut self, character: char) -> Result<Keysym, Box<dyn std::error::Error>> {
+    pub fn keysym_from_character(&mut self, character: char) -> Result<Keysym, Error> {
         let (keysyms, _) = self.get_keyboard_mapping()?;
 
         keysyms.iter()
             .find(|keysym| keysym.character().map(|c| c == character).unwrap_or(false))
             .map(|keysym| *keysym)
-            .ok_or(Box::new(Error::InvalidKeysym))
+            .ok_or(Error::InvalidKeysym)
     }
 
     /// get the keycode from a keysym
-    pub fn keycode_from_keysym(&mut self, keysym: Keysym) -> Result<u8, Box<dyn std::error::Error>> {
+    pub fn keycode_from_keysym(&mut self, keysym: Keysym) -> Result<u8, Error> {
         let (keysyms, keysyms_per_keycode) = self.get_keyboard_mapping()?;
 
         keysyms.iter()
             .enumerate()
             .find(|(_, x)| **x == keysym)
             .map(|(index, _)| ((index / keysyms_per_keycode as usize) + self.setup.min_keycode as usize) as u8)
-            .ok_or(Box::new(Error::InvalidKeysym))
+            .ok_or(Error::InvalidKeysym)
     }
 
     /// ungrab the pointer
-    pub fn ungrab_pointer(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn ungrab_pointer(&mut self) -> Result<(), Error> {
         self.sequence.skip();
 
-        // TODO: un-hardcode time as current time
+        // TODO: un-hardcode current time
 
         self.stream.send_encode(UngrabPointer {
             opcode: Opcode::UNGRAB_POINTER,
@@ -450,7 +471,7 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
             time: 0,
         })?;
 
-        Ok(())
+        self.replies.poll_error()
     }
 
     fn endian(&self) -> u8 {
@@ -462,13 +483,11 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
     fn read_setup(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         self.setup = self.stream.recv_decode()?;
 
-        let vendor = self.stream.recv_str(self.setup.vendor_len as usize)?;
+        let _vendor = self.stream.recv_str(self.setup.vendor_len as usize)?;
 
         let bytes = self.stream.recv(std::mem::size_of::<PixmapFormat>() * self.setup.pixmap_formats_len as usize)?;
 
-        let formats: &[PixmapFormat] = request::decode_slice(&bytes, self.setup.pixmap_formats_len as usize);
-
-        // println!("formats: {:?}", formats);
+        let _formats: &[PixmapFormat] = request::decode_slice(&bytes, self.setup.pixmap_formats_len as usize);
 
         for _ in 0..self.setup.roots_len {
             let mut screen = Screen::new(self.stream.recv_decode()?);
@@ -544,7 +563,7 @@ impl<T> EventListener<T> where T: Send + Sync + Read + Write + TryClone {
         }
     }
 
-    fn handle_reply(&mut self, event: GenericEvent) -> Result<(), Box<dyn std::error::Error>> {
+    fn handle_reply(&mut self, event: GenericEvent) -> Result<(), Error> {
         let sequence = self.sequence.get(event.sequence)?;
 
         match sequence.kind {
@@ -577,6 +596,11 @@ impl<T> EventListener<T> where T: Send + Sync + Read + Write + TryClone {
                 let response: QueryExtensionResponse = self.stream.recv_decode()?;
 
                 self.replies.push(Reply::QueryExtension(response))?;
+            },
+            ReplyKind::GetSelectionOwner => {
+                let response: GetSelectionOwnerResponse = self.stream.recv_decode()?;
+
+                self.replies.push(Reply::GetSelectionOwner(response))?;
             },
             #[cfg(feature = "xinerama")]
             ReplyKind::XineramaIsActive => {
@@ -630,17 +654,18 @@ impl<T> EventListener<T> where T: Send + Sync + Read + Write + TryClone {
     // TODO: there is a lot of repetition here, it may be possible to procedurally generate this
     // through macros instead
 
-    fn handle_event(&mut self, generic: GenericEvent) -> Result<(), Box<dyn std::error::Error>> {
+    fn handle_event(&mut self, generic: GenericEvent) -> Result<(), Error> {
         match generic.opcode & 0b0111111 {
             Response::ERROR => {
                 let error: ErrorEvent = self.stream.recv_decode()?;
 
-                println!("error: {:?}", error);
-
-                Err(Box::new(Error::Event {
-                    detail: generic.detail,
+                self.replies.push_error(Error::Event {
+                    error: ErrorCode::from(generic.detail),
+                    major_opcode: error.major_opcode,
+                    minor_opcode: error.minor_opcode,
+                    bad_value: error.bad_value,
                     sequence: generic.sequence,
-                }))
+                })
             },
             Response::REPLY => {
                 self.handle_reply(generic)?;

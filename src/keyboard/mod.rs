@@ -47,12 +47,12 @@ impl Keysym {
     }
 
     /// get the character representation of a keysym
-    pub fn character(&self) -> Result<char, Box<dyn std::error::Error>> {
+    pub fn character(&self) -> Result<char, Error> {
         match ((self.value & 0xff00) >> 8) as u8 {
             CharacterSet::LATIN1 => {
-                char::from_u32((self.value & 0xff) + 0x20 - 32).ok_or(Box::new(Error::InvalidKeysym))
+                char::from_u32((self.value & 0xff) + 0x20 - 32).ok_or(Error::InvalidKeysym)
             },
-            _ => Err(Box::new(Error::InvalidKeysym)),
+            _ => Err(Error::InvalidKeysym),
         }
     }
 }
