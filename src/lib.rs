@@ -17,4 +17,9 @@ pub mod keyboard;
 /// implementation of popular x11 extensions such as xinerama
 pub mod extension;
 
+/// clipboard is a user-friendly wrapper around x11 selections
+
+// #[cfg(feature = "clipboard")]
+pub mod clipboard;
+
 

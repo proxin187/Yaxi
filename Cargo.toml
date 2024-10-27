@@ -1,6 +1,6 @@
 [package]
 name = "yaxi"
-version = "0.1.31"
+version = "0.1.32"
 edition = "2021"
 
 description = "A rust implementation of the x11 protocol"
@@ -15,11 +15,8 @@ license = "MIT OR Apache-2.0"
 name = "yaxi"
 path = "src/lib.rs"
 
-[[bin]]
-name = "example"
-path = "src/bin.rs"
-
 [features]
 xinerama = []
+clipboard = []
 
 [dependencies]

@@ -279,6 +279,23 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
         }
     }
 
+    /// send an event to the window
+    pub fn send_event(&mut self, event: Event, event_mask: Vec<EventMask>, propogate: bool) -> Result<(), Error> {
+        self.sequence.skip();
+
+        self.stream.send_encode(SendEvent {
+            opcode: Opcode::SEND_EVENT,
+            propogate: propogate.then(|| 1).unwrap_or(0),
+            length: 11,
+            destination: self.id(),
+            event_mask: event_mask.iter().fold(0, |acc, mask| acc | *mask as u32),
+        })?;
+
+        self.stream.send(Into::<Vec<u8>>::into(event).as_slice())?;
+
+        self.replies.poll_error()
+    }
+
     /// get the window attributes
     pub fn get_window_attributes(&mut self) -> Result<GetWindowAttributesResponse, Error> {
         self.sequence.append(ReplyKind::GetWindowAttributes)?;
@@ -585,7 +602,7 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
     }
 
     /// get the value of a property from a window
-    pub fn get_property(&mut self, property: Atom, type_: Atom, delete: bool) -> Result<Vec<u8>, Error> {
+    pub fn get_property(&mut self, property: Atom, type_: Atom, delete: bool) -> Result<(Vec<u8>, Atom), Error> {
         self.sequence.append(ReplyKind::GetProperty)?;
 
         self.stream.send_encode(GetProperty {
@@ -600,7 +617,7 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
         })?;
 
         match self.replies.wait()? {
-            Reply::GetProperty { value } => Ok(value),
+            Reply::GetProperty { type_, value } => Ok((value, type_)),
             _ => unreachable!(),
         }
     }

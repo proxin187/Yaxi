@@ -1,4 +1,4 @@
-use crate::display::request::*;
+use crate::display::request::{self, *};
 use crate::display::error::Error;
 use crate::display::Atom;
 use crate::keyboard::Keysym;
@@ -65,10 +65,11 @@ impl Opcode {
     pub const CHANGE_PROPERTY: u8 = 18;
     pub const DELETE_PROPERTY: u8 = 19;
     pub const GET_PROPERTY: u8 = 20;
-    pub const GRAB_POINTER: u8 = 26;
     pub const SET_SELECTION_OWNER: u8 = 22;
     pub const GET_SELECTION_OWNER: u8 = 23;
     pub const CONVERT_SELECTION: u8 = 24;
+    pub const SEND_EVENT: u8 = 25;
+    pub const GRAB_POINTER: u8 = 26;
     pub const UNGRAB_POINTER: u8 = 27;
     pub const GRAB_BUTTON: u8 = 28;
     pub const UNGRAB_BUTTON: u8 = 29;
@@ -194,6 +195,7 @@ pub enum Reply {
     },
 
     GetProperty {
+        type_: Atom,
         value: Vec<u8>,
     },
     GetKeyboardMapping {
@@ -708,6 +710,24 @@ pub enum Event {
         keycode: u8,
         count: u8,
     },
+}
+
+impl Into<Vec<u8>> for Event {
+    fn into(self) -> Vec<u8> {
+        match self {
+            Event::SelectionNotify { time, requestor, selection, target, property } => {
+                request::encode(&SelectionNotify {
+                    time,
+                    requestor,
+                    selection: selection.id(),
+                    target: target.id(),
+                    property: property.id(),
+                    pad0: [0u8; 8],
+                }).to_vec()
+            },
+            _ => unimplemented!("not all events are implemented for send event yet"),
+        }
+    }
 }
 
 

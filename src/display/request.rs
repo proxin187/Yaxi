@@ -41,7 +41,7 @@ pub struct SetupResponse {
 }
 
 #[repr(packed, C)]
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct SuccessResponse {
     pub release_number: u32,
     pub resource_id_base: u32,
@@ -779,6 +779,16 @@ pub struct ConvertSelection {
     pub target: u32,
     pub property: u32,
     pub time: u32,
+}
+
+#[repr(packed, C)]
+#[derive(Debug, Clone)]
+pub struct SendEvent {
+    pub opcode: u8,
+    pub propogate: u8,
+    pub length: u16,
+    pub destination: u32,
+    pub event_mask: u32,
 }
 
 pub fn encode<T>(ptr: &T) -> &[u8] {

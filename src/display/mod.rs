@@ -8,6 +8,8 @@ use crate::extension::Extension;
 #[cfg(feature = "xinerama")]
 use crate::extension::xinerama::Xinerama;
 
+use crate::clipboard::Clipboard;
+
 use crate::proto::*;
 use crate::window::*;
 use crate::keyboard::*;
@@ -136,6 +138,9 @@ pub struct Atom {
 }
 
 impl Atom {
+    /// this is not really a atom, its just for functions that can take AnyPropertyValue
+    pub const ANY_PROPERTY_TYPE: Atom = Atom::new(0);
+
     pub const PRIMARY: Atom = Atom::new(1);
     pub const SECONDARY: Atom = Atom::new(2);
     pub const ARC: Atom = Atom::new(3);
@@ -167,6 +172,9 @@ impl Atom {
 
     /// get the id of the atom
     pub fn id(&self) -> u32 { self.id }
+
+    /// returns true of the atom is null
+    pub fn is_null(&self) -> bool { self.id == 0 }
 }
 
 #[derive(Debug, Clone)]
@@ -294,6 +302,18 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
         display.setup()?;
 
         Ok(display)
+    }
+
+    /// get the clipboard interface
+    pub fn clipboard(&mut self) -> Result<Clipboard<T>, Error> {
+        Clipboard::new(Display {
+            stream: self.stream.clone(),
+            events: self.events.clone(),
+            replies: self.replies.clone(),
+            roots: self.roots.clone(),
+            setup: self.setup.clone(),
+            sequence: self.sequence.clone(),
+        })
     }
 
     /// wait for the next event
@@ -629,6 +649,7 @@ impl<T> EventListener<T> where T: Send + Sync + Read + Write + TryClone {
                 let response: GetPropertyResponse = self.stream.recv_decode()?;
 
                 self.replies.push(Reply::GetProperty {
+                    type_: Atom::new(response.type_),
                     value: self.stream.recv(response.value_len as usize)?,
                 })?;
 
