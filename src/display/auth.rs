@@ -26,7 +26,7 @@ impl XAuth {
             .open(env::var("XAUTHORITY")?)?;
 
         Ok(XAuth {
-            file: Stream::new(file),
+            file: Stream::new(file)?,
         })
     }
 

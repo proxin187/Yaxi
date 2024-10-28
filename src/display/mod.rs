@@ -26,6 +26,11 @@ use std::thread;
 
 // https://www.x.org/docs/XProtocol/proto.pdf
 
+macro_rules! lock {
+    ($mutex:expr) => {
+        $mutex.lock().map_err(|_| Error::FailedToLock)
+    }
+}
 
 const X_TCP_PORT: u16 = 6000;
 const X_PROTOCOL: u16 = 11;
@@ -60,7 +65,8 @@ impl TryClone for UnixStream {
 }
 
 pub struct Stream<T> {
-    inner: Box<T>,
+    reader: Box<T>,
+    writer: Arc<Mutex<T>>,
 }
 
 impl<T> Clone for Stream<T> where T: Send + Sync + Read + Write + TryClone {
@@ -70,34 +76,42 @@ impl<T> Clone for Stream<T> where T: Send + Sync + Read + Write + TryClone {
 }
 
 impl<T> Stream<T> where T: Send + Sync + Read + Write + TryClone {
-    pub fn new(inner: T) -> Stream<T> {
-        Stream {
-            inner: Box::new(inner),
-        }
+    pub fn new(inner: T) -> Result<Stream<T>, Error> {
+        Ok(Stream {
+            reader: inner.try_clone()?,
+            writer: Arc::new(Mutex::new(inner)),
+        })
     }
 
     pub fn try_clone(&self) -> Result<Stream<T>, Error> {
         Ok(Stream {
-            inner: self.inner.try_clone()?,
+            reader: self.reader.try_clone()?,
+            writer: self.writer.clone(),
         })
     }
 
     pub fn send(&mut self, request: &[u8]) -> Result<(), Error> {
-        self.inner.write_all(request).map_err(|err| Error::Other { error: err.into() })
+        let mut lock = lock!(self.writer)?;
+
+        lock.write_all(request).map_err(|err| Error::Other { error: err.into() })
     }
 
     pub fn send_arr(&mut self, requests: &[Vec<u8>]) -> Result<(), Error> {
+        let mut lock = lock!(self.writer)?;
+
         for request in requests {
-            self.send(request)?;
+            lock.write_all(request).map_err(|err| Error::Other { error: err.into() })?;
         }
 
         Ok(())
     }
 
     pub fn send_pad(&mut self, request: &[u8]) -> Result<(), Error> {
-        self.send(request)?;
+        let mut lock = lock!(self.writer)?;
 
-        self.send(&vec![0u8; request::pad(request.len())])?;
+        lock.write_all(request).map_err(|err| Error::Other { error: err.into() })?;
+
+        lock.write_all(&vec![0u8; request::pad(request.len())]).map_err(|err| Error::Other { error: err.into() })?;
 
         Ok(())
     }
@@ -109,7 +123,7 @@ impl<T> Stream<T> where T: Send + Sync + Read + Write + TryClone {
     pub fn recv(&mut self, size: usize) -> Result<Vec<u8>, Error> {
         let mut buffer = vec![0u8; size];
 
-        match self.inner.read_exact(&mut buffer) {
+        match self.reader.read_exact(&mut buffer) {
             Ok(()) => Ok(buffer),
             Err(err) => Err(Error::Other { error: err.into() }),
         }
@@ -286,12 +300,26 @@ pub struct Display<T> where T: Send + Sync + Read + Write + TryClone {
     pub(crate) sequence: SequenceManager,
 }
 
+impl<T> Clone for Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
+    /// get a thread safe clone of the display
+    fn clone(&self) -> Display<T> {
+        Display {
+            stream: self.stream.clone(),
+            events: self.events.clone(),
+            replies: self.replies.clone(),
+            roots: self.roots.clone(),
+            setup: self.setup.clone(),
+            sequence: self.sequence.clone(),
+        }
+    }
+}
+
 impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
     pub fn connect<'a>(inner: T) -> Result<Display<T>, Box<dyn std::error::Error>> {
         let errors: Arc<Mutex<Vec<Error>>> = Arc::new(Mutex::new(Vec::new()));
 
         let mut display = Display {
-            stream: Stream::new(inner),
+            stream: Stream::new(inner)?,
             events: Queue::new(errors.clone()),
             replies: Queue::new(errors.clone()),
             roots: Roots::new(),
@@ -306,14 +334,7 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
 
     /// get the clipboard interface
     pub fn clipboard(&mut self) -> Result<Clipboard<T>, Error> {
-        Clipboard::new(Display {
-            stream: self.stream.clone(),
-            events: self.events.clone(),
-            replies: self.replies.clone(),
-            roots: self.roots.clone(),
-            setup: self.setup.clone(),
-            sequence: self.sequence.clone(),
-        })
+        Clipboard::new(self.clone())
     }
 
     /// wait for the next event
