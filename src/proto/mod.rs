@@ -730,4 +730,39 @@ impl Into<Vec<u8>> for Event {
     }
 }
 
+impl Event {
+    pub fn opcode(&self) -> u8 {
+        match self {
+            Event::KeyEvent { kind, .. } => match kind {
+                EventKind::Press => Response::KEY_PRESS,
+                EventKind::Release => Response::KEY_RELEASE,
+            },
+            Event::ButtonEvent { kind, .. } => match kind {
+                EventKind::Press => Response::BUTTON_PRESS,
+                EventKind::Release => Response::BUTTON_RELEASE,
+            },
+            Event::MotionNotify { .. } => Response::MOTION_NOTIFY,
+            Event::EnterNotify { .. } => Response::ENTER_NOTIFY,
+            Event::FocusIn { .. } => Response::FOCUS_IN,
+            Event::FocusOut { .. } => Response::FOCUS_OUT,
+            Event::CreateNotify { .. } => Response::CREATE_NOTIFY,
+            Event::DestroyNotify { .. } => Response::DESTROY_NOTIFY,
+            Event::UnmapNotify { .. } => Response::UNMAP_NOTIFY,
+            Event::MapNotify { .. } => Response::MAP_NOTIFY,
+            Event::MapRequest { .. } => Response::MAP_REQUEST,
+            Event::ReparentNotify { .. } => Response::REPARENT_NOTIFY,
+            Event::ConfigureNotify { .. } => Response::CONFIGURE_NOTIFY,
+            Event::ConfigureRequest { .. } => Response::CONFIGURE_REQUEST,
+            Event::GravityNotify { .. } => Response::GRAVITY_NOTIFY,
+            Event::CirculateNotify { .. } => Response::CIRCULATE_NOTIFY,
+            Event::CirculateRequest { .. } => Response::CIRCULATE_REQUEST,
+            Event::SelectionClear { .. } => Response::SELECTION_CLEAR,
+            Event::SelectionRequest { .. } => Response::SELECTION_REQUEST,
+            Event::SelectionNotify { .. } => Response::SELECTION_NOTIFY,
+            Event::ClientMessage { .. } => Response::CLIENT_MESSAGE,
+            Event::MappingNotify { .. } => Response::MAPPING_NOTIFY,
+        }
+    }
+}
+
 

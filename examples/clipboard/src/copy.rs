@@ -2,7 +2,7 @@ use yaxi::display;
 
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut display = display::open_unix(0)?;
+    let mut display = display::open_unix(1)?;
 
     let mut clipboard = display.clipboard()?;
 

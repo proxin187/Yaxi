@@ -8,6 +8,7 @@ use crate::extension::Extension;
 #[cfg(feature = "xinerama")]
 use crate::extension::xinerama::Xinerama;
 
+#[cfg(feature = "xinerama")]
 use crate::clipboard::Clipboard;
 
 use crate::proto::*;
@@ -333,6 +334,8 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
     }
 
     /// get the clipboard interface
+
+    #[cfg(feature = "clipboard")]
     pub fn clipboard(&mut self) -> Result<Clipboard<T>, Error> {
         Clipboard::new(self.clone())
     }
@@ -363,15 +366,17 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
     pub fn query_extension(&mut self, extension: Extension) -> Result<QueryExtensionResponse, Error> {
         self.sequence.append(ReplyKind::QueryExtension)?;
 
-        self.stream.send_encode(QueryExtension {
+        let request = QueryExtension {
             opcode: Opcode::QUERY_EXTENSION,
             pad0: 0,
             length: 2 + (extension.len() as u16 + request::pad(extension.len()) as u16) / 4,
             name_len: extension.len() as u16,
             pad1: 0,
-        })?;
+        };
 
-        self.stream.send_pad(extension.to_string().as_bytes())?;
+        let extension = extension.to_string();
+
+        self.stream.send(&[request::encode(&request).to_vec(), extension.as_bytes().to_vec(), vec![0u8; request::pad(extension.as_bytes().len())]].concat())?;
 
         match self.replies.wait()? {
             Reply::QueryExtension(response) => Ok(response),
@@ -416,9 +421,7 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
             pad1: [0u8; 2],
         };
 
-        self.stream.send(request::encode(&request))?;
-
-        self.stream.send_pad(name.as_bytes())?;
+        self.stream.send(&[request::encode(&request).to_vec(), name.as_bytes().to_vec(), vec![0u8; request::pad(name.as_bytes().len())]].concat())?;
 
         match self.replies.wait()? {
             Reply::InternAtom(response) => match response.atom {
@@ -697,6 +700,10 @@ impl<T> EventListener<T> where T: Send + Sync + Read + Write + TryClone {
     // through macros instead
 
     fn handle_event(&mut self, generic: GenericEvent) -> Result<(), Error> {
+        let sequence = generic.sequence;
+
+        println!("sequence: {}", sequence);
+
         match generic.opcode & 0b0111111 {
             Response::ERROR => {
                 let error: ErrorEvent = self.stream.recv_decode()?;

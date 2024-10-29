@@ -283,15 +283,21 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
     pub fn send_event(&mut self, event: Event, event_mask: Vec<EventMask>, propogate: bool) -> Result<(), Error> {
         self.sequence.skip();
 
-        self.stream.send_encode(SendEvent {
+        let request = SendEvent {
             opcode: Opcode::SEND_EVENT,
             propogate: propogate.then(|| 1).unwrap_or(0),
             length: 11,
             destination: self.id(),
             event_mask: event_mask.iter().fold(0, |acc, mask| acc | *mask as u32),
-        })?;
+        };
 
-        self.stream.send(Into::<Vec<u8>>::into(event).as_slice())?;
+        let generic_event = GenericEvent {
+            opcode: event.opcode(),
+            detail: 0,
+            sequence: 0,
+        };
+
+        self.stream.send(&[request::encode(&request).to_vec(), request::encode(&generic_event).to_vec(), Into::<Vec<u8>>::into(event)].concat())?;
 
         self.replies.poll_error()
     }
@@ -397,7 +403,7 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
         let window_values_request = window.values.build();
         let wid = xid::next()?;
 
-        self.stream.send_encode(CreateWindow {
+        let request = CreateWindow {
             opcode: Opcode::CREATE_WINDOW,
             depth: window.depth,
             length: 8 + window.values.len(),
@@ -411,9 +417,9 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
             class: window.class as u16,
             visual: window.visual.id,
             value_mask: window.values.mask,
-        })?;
+        };
 
-        self.stream.send(&window_values_request)?;
+        self.stream.send(&[window_values_request, request::encode(&request).to_vec()].concat())?;
 
         self.replies.poll_error()?;
 
@@ -585,18 +591,23 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
             data_len: format.encode(data.len()),
         };
 
-        self.stream.send(request::encode(&request))?;
-
-        self.stream.send_pad(data)?;
+        self.stream.send(&[request::encode(&request), data].concat())?;
 
         self.replies.poll_error()
     }
 
     /// delete a property from a window
     pub fn delete_property(&mut self, property: Atom) -> Result<(), Error> {
-        self.generic_window(Opcode::DELETE_PROPERTY, 3)?;
+        self.sequence.skip();
 
-        self.stream.send_encode(property.id())?;
+        let request = GenericWindow {
+            opcode: Opcode::DELETE_PROPERTY,
+            pad0: 0,
+            length: 3,
+            wid: self.id(),
+        };
+
+        self.stream.send(&[request::encode(&request), request::encode(&property.id())].concat())?;
 
         self.replies.poll_error()
     }

@@ -1,7 +1,5 @@
 use yaxi::display;
 
-// NOTE: THIS CODE SNIPPET ACTUALLY WORKS!!!
-
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut display = display::open_unix(0)?;

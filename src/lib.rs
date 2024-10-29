@@ -19,7 +19,7 @@ pub mod extension;
 
 /// clipboard is a user-friendly wrapper around x11 selections
 
-// #[cfg(feature = "clipboard")]
+#[cfg(feature = "clipboard")]
 pub mod clipboard;
 
 
