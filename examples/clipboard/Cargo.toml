@@ -16,4 +16,4 @@ name = "paste"
 path = "src/paste.rs"
 
 [dependencies]
-yaxi = { path = "../.." }
+yaxi = { path = "../..", features = ["clipboard"] }

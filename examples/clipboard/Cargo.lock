@@ -11,4 +11,4 @@ dependencies = [
 
 [[package]]
 name = "yaxi"
-version = "0.1.33"
+version = "0.1.34"
