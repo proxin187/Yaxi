@@ -336,8 +336,8 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
     /// get the clipboard interface
 
     #[cfg(feature = "clipboard")]
-    pub fn clipboard(&mut self) -> Result<Clipboard<T>, Error> {
-        Clipboard::new(self.clone())
+    pub fn clipboard(&mut self) -> Result<crate::clipboard::Clipboard<T>, Error> {
+        crate::clipboard::Clipboard::new(self.clone())
     }
 
     /// wait for the next event

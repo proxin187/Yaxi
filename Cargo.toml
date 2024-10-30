@@ -20,3 +20,6 @@ xinerama = []
 clipboard = []
 
 [dependencies]
+
+[workspace]
+members = ["examples/*"]
