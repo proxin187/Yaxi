@@ -55,7 +55,6 @@ struct Target<T> where T: Send + Sync + Read + Write + TryClone {
 
 pub struct Clipboard<T> where T: Send + Sync + Read + Write + TryClone {
     display: Display<T>,
-    root: Window<T>,
     target: Target<T>,
     atoms: Atoms,
     data: Arc<RwLock<ClipboardData>>,
@@ -98,7 +97,6 @@ impl<T> Clipboard<T> where T: Send + Sync + Read + Write + TryClone + 'static {
 
         Ok(Clipboard {
             display,
-            root,
             target,
             atoms,
             data,
@@ -113,25 +111,51 @@ impl<T> Clipboard<T> where T: Send + Sync + Read + Write + TryClone + 'static {
         write!(self.data).map(|mut lock| lock.set(text.as_bytes(), self.atoms.utf8))
     }
 
-    fn read_utf8(&mut self) -> Result<String, Error> {
-        let (bytes, _) = self.target.window.get_property(self.target.property, Atom::ANY_PROPERTY_TYPE, false)?;
-
+    fn to_string(&self, bytes: Vec<u8>) -> Result<String, Error> {
         String::from_utf8(bytes).map_err(|err| Error::Other { error: err.into() })
+    }
+
+    fn get_selection(&mut self) -> Result<Vec<u8>, Error> {
+        self.target.window.convert_selection(self.atoms.clipboard, self.atoms.utf8, self.target.property)?;
+
+        loop {
+            println!("waiting for event");
+
+            // TODO: its almost random, sometimes it works, other times it doesnt
+            //
+            // maybe its a deadlock?
+
+            match self.display.next_event()? {
+                Event::SelectionNotify { property, .. } => {
+                    println!("huh?: {:?}", property);
+
+                    let (bytes, _) = self.target.window.get_property(self.target.property, Atom::ANY_PROPERTY_TYPE, false)?;
+
+                    return property.is_null()
+                        .then(|| Ok(Vec::new()))
+                        .unwrap_or_else(|| Ok(bytes));
+                },
+                _ => {},
+            }
+        }
     }
 
     /// get text from the clipboard
     pub fn get_text(&mut self) -> Result<String, Error> {
-        self.target.window.convert_selection(self.atoms.clipboard, self.atoms.utf8, self.target.property)?;
+        let owner = self.display.get_selection_owner(self.atoms.clipboard)?;
 
-        loop {
-            match self.display.next_event()? {
-                Event::SelectionNotify { property, .. } => {
-                    return property.is_null()
-                        .then(|| Ok(String::new()))
-                        .unwrap_or_else(|| self.read_utf8());
-                },
-                _ => {},
-            }
+        if owner == self.target.window.id() {
+            self.to_string(read!(self.data)?.get())
+        } else if self.display.window_from_id(owner).is_ok() {
+            println!("ok?: {}", owner);
+
+            let selection = self.get_selection()?;
+
+            println!("selection: {:?}", selection);
+
+            self.to_string(selection)
+        } else {
+            Ok(String::new())
         }
     }
 }
@@ -199,13 +223,15 @@ impl<T> Listener <T> where T: Send + Sync + Read + Write + TryClone + 'static {
 
     pub fn listen(&mut self) -> Result<(), Error> {
         while !self.kill.load(Ordering::Relaxed) {
-            match self.display.next_event()? {
-                Event::SelectionRequest { time, owner, selection, target, property } => {
-                    let owner = self.display.window_from_id(owner)?;
+            if self.display.poll_event()? {
+                match self.display.next_event()? {
+                    Event::SelectionRequest { time, owner, selection, target, property } => {
+                        let owner = self.display.window_from_id(owner)?;
 
-                    self.handle_request(time, owner, selection, target, property)?;
-                },
-                _ => {},
+                        self.handle_request(time, owner, selection, target, property)?;
+                    },
+                    _ => {},
+                }
             }
         }
 

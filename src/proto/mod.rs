@@ -3,7 +3,7 @@ use crate::display::error::Error;
 use crate::display::Atom;
 use crate::keyboard::Keysym;
 
-use std::sync::atomic::{Ordering, AtomicU16};
+use std::sync::atomic::{Ordering, AtomicU16, AtomicBool};
 use std::sync::{Arc, Mutex};
 
 macro_rules! lock {
@@ -129,37 +129,86 @@ impl From<u8> for ErrorCode {
     }
 }
 
-#[derive(Clone)]
-pub struct Queue<T> {
+pub struct Queue<T: std::fmt::Debug + Clone> {
     queue: Arc<Mutex<Vec<T>>>,
     errors: Arc<Mutex<Vec<Error>>>,
+    refs: Arc<AtomicU16>,
+    ready: Arc<AtomicBool>
 }
 
-impl<T> Queue<T> {
+impl<T> Clone for Queue<T> where T: std::fmt::Debug + Clone {
+    fn clone(&self) -> Queue<T> {
+        Queue {
+            queue: self.queue.clone(),
+            errors: self.errors.clone(),
+            refs: self.refs.clone(),
+            ready: self.ready.clone(),
+        }
+    }
+}
+
+impl<T> Queue<T> where T: std::fmt::Debug + Clone {
     pub fn new(errors: Arc<Mutex<Vec<Error>>>) -> Queue<T> {
         Queue {
             queue: Arc::new(Mutex::new(Vec::new())),
             errors,
+            refs: Arc::new(AtomicU16::new(0)),
+            ready: Arc::new(AtomicBool::new(false)),
         }
     }
 
-    pub fn clone(&self) -> Queue<T> {
-        Queue {
-            queue: self.queue.clone(),
-            errors: self.errors.clone(),
-        }
-    }
-
+    #[inline]
     pub fn poll(&mut self) -> Result<bool, Error> {
         self.poll_error()?;
 
         Ok(!lock!(self.queue)?.is_empty())
     }
 
-    pub fn wait(&mut self) -> Result<T, Error> {
+    #[inline]
+    pub fn wait_poll(&mut self) -> Result<(), Error> {
+        while !self.ready.load(Ordering::Relaxed) {}
+
+        self.refs.fetch_add(1, Ordering::Relaxed);
+
         while !self.poll()? {}
 
-        lock!(self.queue)?.pop().ok_or(Error::NoReply)
+        Ok(())
+    }
+
+    // TODO: THE PROBLEM IS THAT WE HAVE MULTIPLE CLIENTS WAITING FOR EVENTS AT THE SAME TIME
+    //
+    // ITS A TIMING BUG!!!
+    //
+    // here we pop, sometimes this results in a no reply error because the other client has
+    // already popped it
+    //
+    // we will have to implement a system resembeling reference counting
+    //
+    // what if we have a counter of the amount of waiting clients and only the last one pops
+    // from the queue
+    //
+    // TODO: there is also a potential timing bug between our call to convert selection and where
+    // we actually start to wait for events
+    //
+    // we can do the solution where each and every queue has its own vector, but the event
+    // listener pushes to them all
+
+    pub fn wait(&mut self) -> Result<T, Error> {
+        self.wait_poll()?;
+
+        if self.refs.fetch_sub(1, Ordering::Relaxed) > 1 {
+            self.ready.store(false, Ordering::Relaxed);
+
+            lock!(self.queue)?.get(0)
+                .map(|value| value.clone())
+                .ok_or(Error::NoReply)
+        } else {
+            let value = lock!(self.queue)?.pop();
+
+            self.ready.store(true, Ordering::Relaxed);
+
+            value.ok_or(Error::NoReply)
+        }
     }
 
     pub fn push(&mut self, element: T) -> Result<(), Error> {

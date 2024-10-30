@@ -937,7 +937,11 @@ impl<T> EventListener<T> where T: Send + Sync + Read + Write + TryClone {
                 })
             },
             Response::SELECTION_NOTIFY => {
+                println!("selection notify");
+
                 let event: SelectionNotify = self.stream.recv_decode()?;
+
+                println!("event: {:?}", event);
 
                 self.events.push(Event::SelectionNotify {
                     time: event.time,
@@ -945,7 +949,11 @@ impl<T> EventListener<T> where T: Send + Sync + Read + Write + TryClone {
                     selection: Atom::new(event.selection),
                     target: Atom::new(event.target),
                     property: Atom::new(event.property),
-                })
+                })?;
+
+                println!("done pushing");
+
+                Ok(())
             },
             Response::CLIENT_MESSAGE => {
                 let event: CircReq = self.stream.recv_decode()?;
