@@ -3,5 +3,22 @@
 version = 3
 
 [[package]]
+name = "clipboard"
+version = "0.1.0"
+dependencies = [
+ "yaxi",
+]
+
+[[package]]
+name = "minimal"
+version = "0.1.0"
+dependencies = [
+ "yaxi",
+]
+
+[[package]]
 name = "yaxi"
 version = "0.1.34"
+dependencies = [
+ "yaxi",
+]

@@ -21,5 +21,10 @@ clipboard = []
 
 [dependencies]
 
+# https://github.com/rust-lang/cargo/issues/2911#issuecomment-749580481
+
+[dev-dependencies]
+yaxi = { path = ".", features = ["clipboard"] }
+
 [workspace]
 members = ["examples/*"]

@@ -702,8 +702,6 @@ impl<T> EventListener<T> where T: Send + Sync + Read + Write + TryClone {
     fn handle_event(&mut self, generic: GenericEvent) -> Result<(), Error> {
         let sequence = generic.sequence;
 
-        println!("sequence: {}", sequence);
-
         match generic.opcode & 0b0111111 {
             Response::ERROR => {
                 let error: ErrorEvent = self.stream.recv_decode()?;
