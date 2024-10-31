@@ -12,6 +12,7 @@ pub enum Error {
     NoScreens,
     NoReply,
     FailedToLock,
+    Spmc,
     SetupFailed {
         reason: String,
     },
@@ -65,6 +66,9 @@ impl std::fmt::Display for Error {
             },
             Error::FailedToLock => {
                 f.write_str("failed to lock mutex")
+            },
+            Error::Spmc => {
+                f.write_str("singe-producer multi-consumer implementation error")
             },
             Error::SetupFailed { reason } => {
                 f.write_fmt(format_args!("connection initiation setup failed: {}", reason))

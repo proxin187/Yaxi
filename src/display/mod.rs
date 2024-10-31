@@ -8,7 +8,7 @@ use crate::extension::Extension;
 #[cfg(feature = "xinerama")]
 use crate::extension::xinerama::Xinerama;
 
-#[cfg(feature = "xinerama")]
+#[cfg(feature = "clipboard")]
 use crate::clipboard::Clipboard;
 
 use crate::proto::*;
@@ -294,7 +294,7 @@ impl Roots {
 
 pub struct Display<T> where T: Send + Sync + Read + Write + TryClone {
     pub(crate) stream: Stream<T>,
-    pub(crate) events: Queue<Event>,
+    pub(crate) events: MultiConsumer<Event>,
     pub(crate) replies: Queue<Reply>,
     pub(crate) roots: Roots,
     pub(crate) setup: SuccessResponse,
@@ -306,7 +306,7 @@ impl<T> Clone for Display<T> where T: Send + Sync + Read + Write + TryClone + 's
     fn clone(&self) -> Display<T> {
         Display {
             stream: self.stream.clone(),
-            events: self.events.clone(),
+            events: self.events.clone().expect("failed to clone events"),
             replies: self.replies.clone(),
             roots: self.roots.clone(),
             setup: self.setup.clone(),
@@ -321,7 +321,7 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
 
         let mut display = Display {
             stream: Stream::new(inner)?,
-            events: Queue::new(errors.clone()),
+            events: MultiConsumer::new(errors.clone()),
             replies: Queue::new(errors.clone()),
             roots: Roots::new(),
             setup: SuccessResponse::default(),
@@ -550,7 +550,7 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
         }
 
         let stream = self.stream.try_clone()?;
-        let events = self.events.clone();
+        let events = self.events.clone()?;
         let replies = self.replies.clone();
         let sequence = self.sequence.clone();
         let roots = self.roots.clone();
@@ -590,14 +590,14 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
 
 pub struct EventListener<T: Send + Sync + Read + Write + TryClone> {
     stream: Stream<T>,
-    events: Queue<Event>,
+    events: MultiConsumer<Event>,
     replies: Queue<Reply>,
     sequence: SequenceManager,
     roots: Roots,
 }
 
 impl<T> EventListener<T> where T: Send + Sync + Read + Write + TryClone {
-    pub fn new(stream: Stream<T>, events: Queue<Event>, replies: Queue<Reply>, sequence: SequenceManager, roots: Roots) -> EventListener<T> {
+    pub fn new(stream: Stream<T>, events: MultiConsumer<Event>, replies: Queue<Reply>, sequence: SequenceManager, roots: Roots) -> EventListener<T> {
         EventListener {
             stream,
             events,

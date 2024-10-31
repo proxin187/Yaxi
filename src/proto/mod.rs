@@ -129,6 +129,92 @@ impl From<u8> for ErrorCode {
     }
 }
 
+type Consumers<T> = Vec<Option<Queue<T>>>;
+
+/// MultiConsumer is a single-producer multi-consumer queue implementation
+
+#[derive(Debug)]
+pub struct MultiConsumer<T: std::fmt::Debug + Clone> {
+    consumers: Arc<Mutex<Consumers<T>>>,
+    idx: usize,
+}
+
+impl<T> Drop for MultiConsumer<T> where T: std::fmt::Debug + Clone {
+    fn drop(&mut self) {
+        let mut lock = lock!(self.consumers).expect("failed to lock");
+
+        lock[self.idx] = None;
+    }
+}
+
+impl<T> MultiConsumer<T> where T: std::fmt::Debug + Clone {
+    pub fn new(errors: Arc<Mutex<Vec<Error>>>) -> MultiConsumer<T> {
+        MultiConsumer {
+            consumers: Arc::new(Mutex::new(vec![Some(Queue::new(errors))])),
+            idx: 0,
+        }
+    }
+
+    pub fn clone(&self) -> Result<MultiConsumer<T>, Error> {
+        let consumer = lock!(self.consumers)?[self.idx].clone();
+
+        lock!(self.consumers)?.push(consumer);
+
+        Ok(MultiConsumer {
+            consumers: self.consumers.clone(),
+            idx: lock!(self.consumers)?.len() - 1,
+        })
+    }
+
+    fn update(&mut self) -> Result<(), Error> {
+        let mut lock = lock!(self.consumers)?;
+
+        if self.idx >= lock.len() - 1 {
+            if let Some(idx) = lock.iter().enumerate().filter_map(|(idx, c)| c.is_none().then(|| idx)).next() {
+                lock[idx] = lock.remove(self.idx);
+
+                self.idx = idx;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn clone_consumer(&mut self, idx: usize) -> Result<Queue<T>, Error> {
+        lock!(self.consumers)?[idx].clone().ok_or(Error::Spmc)
+    }
+
+    #[inline]
+    pub fn push(&mut self, element: T) -> Result<(), Error> {
+        self.update()?;
+
+        for queue in lock!(self.consumers)?.iter_mut() {
+            if let Some(queue) = queue {
+                queue.push(element.clone())?;
+            }
+        }
+
+        Ok(())
+    }
+
+    #[inline]
+    pub fn poll(&mut self) -> Result<bool, Error> {
+        self.update()?;
+
+        self.clone_consumer(self.idx)?.poll()
+    }
+
+    #[inline]
+    pub fn wait(&mut self) -> Result<T, Error> {
+        self.update()?;
+
+        self.clone_consumer(self.idx)?.wait()
+    }
+}
+
+/// queue is a single-producer single-consumer queue implementation
+
+#[derive(Debug)]
 pub struct Queue<T: std::fmt::Debug + Clone> {
     queue: Arc<Mutex<Vec<T>>>,
     errors: Arc<Mutex<Vec<Error>>>,
@@ -158,68 +244,32 @@ impl<T> Queue<T> where T: std::fmt::Debug + Clone {
     }
 
     #[inline]
-    pub fn poll(&mut self) -> Result<bool, Error> {
+    pub fn poll(&self) -> Result<bool, Error> {
         self.poll_error()?;
 
         Ok(!lock!(self.queue)?.is_empty())
     }
 
-    #[inline]
-    pub fn wait_poll(&mut self) -> Result<(), Error> {
-        while !self.ready.load(Ordering::Relaxed) {}
-
-        self.refs.fetch_add(1, Ordering::Relaxed);
-
+    pub fn wait(&self) -> Result<T, Error> {
         while !self.poll()? {}
 
-        Ok(())
+        let index = lock!(self.queue)?.len() - 1;
+
+        lock!(self.queue).map(|mut lock| lock.remove(index))
     }
 
-    // TODO: THE PROBLEM IS THAT WE HAVE MULTIPLE CLIENTS WAITING FOR EVENTS AT THE SAME TIME
-    //
-    // ITS A TIMING BUG!!!
-    //
-    // here we pop, sometimes this results in a no reply error because the other client has
-    // already popped it
-    //
-    // we will have to implement a system resembeling reference counting
-    //
-    // what if we have a counter of the amount of waiting clients and only the last one pops
-    // from the queue
-    //
-    // TODO: there is also a potential timing bug between our call to convert selection and where
-    // we actually start to wait for events
-    //
-    // we can do the solution where each and every queue has its own vector, but the event
-    // listener pushes to them all
-
-    pub fn wait(&mut self) -> Result<T, Error> {
-        self.wait_poll()?;
-
-        if self.refs.fetch_sub(1, Ordering::Relaxed) > 1 {
-            self.ready.store(false, Ordering::Relaxed);
-
-            lock!(self.queue)?.get(0)
-                .map(|value| value.clone())
-                .ok_or(Error::NoReply)
-        } else {
-            let value = lock!(self.queue)?.pop();
-
-            self.ready.store(true, Ordering::Relaxed);
-
-            value.ok_or(Error::NoReply)
-        }
-    }
-
+    #[inline]
     pub fn push(&mut self, element: T) -> Result<(), Error> {
         lock!(self.queue).map(|mut lock| lock.push(element))
     }
 
+    #[inline]
     pub fn push_error(&mut self, error: Error) -> Result<(), Error> {
         lock!(self.errors).map(|mut lock| lock.push(error))
     }
 
-    pub fn poll_error(&mut self) -> Result<(), Error> {
+    #[inline]
+    pub fn poll_error(&self) -> Result<(), Error> {
         lock!(self.errors)?.pop().map_or(Ok(()), |error| Err(error))
     }
 }
@@ -365,7 +415,7 @@ impl From<u8> for StackMode {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Place {
     Top,
     Bottom,
@@ -553,7 +603,7 @@ impl From<u8> for Button {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum FocusDetail {
     Ancestor = 0,
     Virtual = 1,
@@ -581,7 +631,7 @@ impl From<u8> for FocusDetail {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum FocusMode {
     Normal = 0,
     Grab = 1,
@@ -607,7 +657,7 @@ pub enum EventKind {
     Release,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Event {
     KeyEvent {
         kind: EventKind,
