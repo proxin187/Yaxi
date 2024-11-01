@@ -36,7 +36,7 @@ impl XAuth {
         self.file.recv(((size[0] as u16) << 8 | size[1] as u16) as usize)
     }
 
-    pub fn entry(&mut self) -> Result<Entry, Box<dyn std::error::Error>> {
+    pub fn entry(&mut self) -> Result<Entry, Error> {
         let family = self.file.recv(mem::size_of::<u16>())?;
 
         Ok(Entry {
@@ -49,8 +49,8 @@ impl XAuth {
     }
 }
 
-pub fn entry() -> Result<Entry, Box<dyn std::error::Error>> {
-    let mut auth = XAuth::new()?;
+pub fn entry() -> Result<Entry, Error> {
+    let mut auth = XAuth::new().map_err(|_| Error::Stream)?;
 
     auth.entry()
 }

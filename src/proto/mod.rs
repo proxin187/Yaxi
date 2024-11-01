@@ -129,6 +129,7 @@ impl From<u8> for ErrorCode {
     }
 }
 
+/*
 type Consumers<T> = Vec<Option<Queue<T>>>;
 
 /// MultiConsumer is a single-producer multi-consumer queue implementation
@@ -188,6 +189,11 @@ impl<T> MultiConsumer<T> where T: std::fmt::Debug + Clone {
     pub fn push(&mut self, element: T) -> Result<(), Error> {
         self.update()?;
 
+        // TODO: maybe we should just remove multi threading?
+        // TODO: yes we are going to remove buitin multi threading support as it should rather be
+        // up to the user to implement such a feature
+        println!("consumer: {:?}, idx: {}", lock!(self.consumers)?, self.idx);
+
         for queue in lock!(self.consumers)?.iter_mut() {
             if let Some(queue) = queue {
                 queue.push(element.clone())?;
@@ -211,6 +217,7 @@ impl<T> MultiConsumer<T> where T: std::fmt::Debug + Clone {
         self.clone_consumer(self.idx)?.wait()
     }
 }
+*/
 
 /// queue is a single-producer single-consumer queue implementation
 
@@ -218,8 +225,6 @@ impl<T> MultiConsumer<T> where T: std::fmt::Debug + Clone {
 pub struct Queue<T: std::fmt::Debug + Clone> {
     queue: Arc<Mutex<Vec<T>>>,
     errors: Arc<Mutex<Vec<Error>>>,
-    refs: Arc<AtomicU16>,
-    ready: Arc<AtomicBool>
 }
 
 impl<T> Clone for Queue<T> where T: std::fmt::Debug + Clone {
@@ -227,8 +232,6 @@ impl<T> Clone for Queue<T> where T: std::fmt::Debug + Clone {
         Queue {
             queue: self.queue.clone(),
             errors: self.errors.clone(),
-            refs: self.refs.clone(),
-            ready: self.ready.clone(),
         }
     }
 }
@@ -238,8 +241,6 @@ impl<T> Queue<T> where T: std::fmt::Debug + Clone {
         Queue {
             queue: Arc::new(Mutex::new(Vec::new())),
             errors,
-            refs: Arc::new(AtomicU16::new(0)),
-            ready: Arc::new(AtomicBool::new(false)),
         }
     }
 

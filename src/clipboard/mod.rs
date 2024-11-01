@@ -1,5 +1,5 @@
 use crate::display::error::Error;
-use crate::display::*;
+use crate::display::{self, *};
 use crate::window::*;
 use crate::proto::*;
 
@@ -68,7 +68,8 @@ impl<T> Drop for Clipboard<T> where T: Send + Sync + Read + Write + TryClone {
 }
 
 impl<T> Clipboard<T> where T: Send + Sync + Read + Write + TryClone + 'static {
-    pub(crate) fn new(mut display: Display<T>) -> Result<Clipboard<T>, Error> {
+    pub fn new() -> Result<Clipboard<T>, Error> {
+        let mut display = display::open_unix(0)?;
         let mut root = display.default_root_window()?;
 
         let target = Target {

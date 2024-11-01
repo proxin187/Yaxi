@@ -12,6 +12,8 @@ pub enum Error {
     NoScreens,
     NoReply,
     FailedToLock,
+    Stream,
+    Utf8,
     Spmc,
     SetupFailed {
         reason: String,
@@ -66,6 +68,12 @@ impl std::fmt::Display for Error {
             },
             Error::FailedToLock => {
                 f.write_str("failed to lock mutex")
+            },
+            Error::Stream => {
+                f.write_str("stream failed")
+            },
+            Error::Utf8 => {
+                f.write_str("invalid utf8")
             },
             Error::Spmc => {
                 f.write_str("singe-producer multi-consumer implementation error")

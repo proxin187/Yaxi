@@ -8,22 +8,25 @@ use yaxi::display;
 mod tests {
     use super::*;
 
-    /*
     #[test]
     fn test_clipboard_read_text() {
         let mut display = display::open_unix(0).unwrap();
+
+        // it sometimes fails here
         let mut clipboard = display.clipboard().unwrap();
 
         let result = clipboard.get_text();
 
         assert!(result.is_ok());
     }
-    */
 
     // TODO: there is a problem here now
+    /*
     #[test]
     fn test_clipboard_write_text() {
         let mut display = display::open_unix(0).unwrap();
+
+        // it sometimes fails here
         let mut clipboard = display.clipboard().unwrap();
 
         let now = SystemTime::now()
@@ -36,10 +39,11 @@ mod tests {
         assert!(result.is_ok());
     }
 
-    /*
     #[test]
     fn test_clipboard_text_consistency() {
         let mut display = display::open_unix(0).unwrap();
+
+        // it sometimes fails here
         let mut clipboard = display.clipboard().unwrap();
 
         let time = SystemTime::now()

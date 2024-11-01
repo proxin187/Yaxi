@@ -8,9 +8,6 @@ use crate::extension::Extension;
 #[cfg(feature = "xinerama")]
 use crate::extension::xinerama::Xinerama;
 
-#[cfg(feature = "clipboard")]
-use crate::clipboard::Clipboard;
-
 use crate::proto::*;
 use crate::window::*;
 use crate::keyboard::*;
@@ -130,12 +127,12 @@ impl<T> Stream<T> where T: Send + Sync + Read + Write + TryClone {
         }
     }
 
-    pub fn recv_str(&mut self, size: usize) -> Result<String, Box<dyn std::error::Error>> {
+    pub fn recv_str(&mut self, size: usize) -> Result<String, Error> {
         let bytes = self.recv(size)?;
 
         self.recv(size % 4)?;
 
-        Ok(String::from_utf8(bytes)?)
+        String::from_utf8(bytes).map_err(|_| Error::Utf8)
     }
 
     pub fn recv_decode<R>(&mut self) -> Result<R, Error> {
@@ -294,19 +291,20 @@ impl Roots {
 
 pub struct Display<T> where T: Send + Sync + Read + Write + TryClone {
     pub(crate) stream: Stream<T>,
-    pub(crate) events: MultiConsumer<Event>,
+    pub(crate) events: Queue<Event>,
     pub(crate) replies: Queue<Reply>,
     pub(crate) roots: Roots,
     pub(crate) setup: SuccessResponse,
     pub(crate) sequence: SequenceManager,
 }
 
+/*
 impl<T> Clone for Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
     /// get a thread safe clone of the display
     fn clone(&self) -> Display<T> {
         Display {
             stream: self.stream.clone(),
-            events: self.events.clone().expect("failed to clone events"),
+            events: self.events.clone(),
             replies: self.replies.clone(),
             roots: self.roots.clone(),
             setup: self.setup.clone(),
@@ -314,14 +312,15 @@ impl<T> Clone for Display<T> where T: Send + Sync + Read + Write + TryClone + 's
         }
     }
 }
+*/
 
 impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
-    pub fn connect<'a>(inner: T) -> Result<Display<T>, Box<dyn std::error::Error>> {
+    pub fn connect<'a>(inner: T) -> Result<Display<T>, Error> {
         let errors: Arc<Mutex<Vec<Error>>> = Arc::new(Mutex::new(Vec::new()));
 
         let mut display = Display {
             stream: Stream::new(inner)?,
-            events: MultiConsumer::new(errors.clone()),
+            events: Queue::new(errors.clone()),
             replies: Queue::new(errors.clone()),
             roots: Roots::new(),
             setup: SuccessResponse::default(),
@@ -333,12 +332,14 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
         Ok(display)
     }
 
+    /*
     /// get the clipboard interface
 
     #[cfg(feature = "clipboard")]
     pub fn clipboard(&mut self) -> Result<crate::clipboard::Clipboard<T>, Error> {
         crate::clipboard::Clipboard::new(self.clone())
     }
+    */
 
     /// wait for the next event
     pub fn next_event(&mut self) -> Result<Event, Error> {
@@ -524,7 +525,7 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
             .unwrap_or_else(|| 0x42)
     }
 
-    fn read_setup(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    fn read_setup(&mut self) -> Result<(), Error> {
         self.setup = self.stream.recv_decode()?;
 
         let _vendor = self.stream.recv_str(self.setup.vendor_len as usize)?;
@@ -550,7 +551,7 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
         }
 
         let stream = self.stream.try_clone()?;
-        let events = self.events.clone()?;
+        let events = self.events.clone();
         let replies = self.replies.clone();
         let sequence = self.sequence.clone();
         let roots = self.roots.clone();
@@ -568,7 +569,7 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
         Ok(())
     }
 
-    fn setup<'a>(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    fn setup<'a>(&mut self) -> Result<(), Error> {
         let entry = auth::entry()?;
 
         let request = SetupRequest::new(self.endian(), X_PROTOCOL, X_PROTOCOL_REVISION, entry.name.len() as u16, entry.data.len() as u16);
@@ -581,23 +582,23 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
 
         match response.status {
             1 => self.read_setup(),
-            0 => Err(Box::new(Error::SetupFailed { reason: self.stream.recv_str(response.padding as usize)? })),
-            2 => Err(Box::new(Error::Authenthicate)),
-            _ => Err(Box::new(Error::InvalidStatus)),
+            0 => Err(Error::SetupFailed { reason: self.stream.recv_str(response.padding as usize)? }),
+            2 => Err(Error::Authenthicate),
+            _ => Err(Error::InvalidStatus),
         }
     }
 }
 
 pub struct EventListener<T: Send + Sync + Read + Write + TryClone> {
     stream: Stream<T>,
-    events: MultiConsumer<Event>,
+    events: Queue<Event>,
     replies: Queue<Reply>,
     sequence: SequenceManager,
     roots: Roots,
 }
 
 impl<T> EventListener<T> where T: Send + Sync + Read + Write + TryClone {
-    pub fn new(stream: Stream<T>, events: MultiConsumer<Event>, replies: Queue<Reply>, sequence: SequenceManager, roots: Roots) -> EventListener<T> {
+    pub fn new(stream: Stream<T>, events: Queue<Event>, replies: Queue<Reply>, sequence: SequenceManager, roots: Roots) -> EventListener<T> {
         EventListener {
             stream,
             events,
@@ -700,8 +701,6 @@ impl<T> EventListener<T> where T: Send + Sync + Read + Write + TryClone {
     // through macros instead
 
     fn handle_event(&mut self, generic: GenericEvent) -> Result<(), Error> {
-        let sequence = generic.sequence;
-
         match generic.opcode & 0b0111111 {
             Response::ERROR => {
                 let error: ErrorEvent = self.stream.recv_decode()?;
@@ -937,11 +936,7 @@ impl<T> EventListener<T> where T: Send + Sync + Read + Write + TryClone {
                 })
             },
             Response::SELECTION_NOTIFY => {
-                println!("selection notify");
-
                 let event: SelectionNotify = self.stream.recv_decode()?;
-
-                println!("event: {:?}", event);
 
                 self.events.push(Event::SelectionNotify {
                     time: event.time,
@@ -950,8 +945,6 @@ impl<T> EventListener<T> where T: Send + Sync + Read + Write + TryClone {
                     target: Atom::new(event.target),
                     property: Atom::new(event.property),
                 })?;
-
-                println!("done pushing");
 
                 Ok(())
             },
@@ -986,20 +979,20 @@ impl<T> EventListener<T> where T: Send + Sync + Read + Write + TryClone {
     }
 }
 
-pub fn open_tcp<'a>(display: u16) -> Result<Display<TcpStream>, Box<dyn std::error::Error>> {
-    let stream = TcpStream::connect(SocketAddr::from(([127, 0, 0, 1], X_TCP_PORT + display)))?;
+pub fn open_tcp<'a>(display: u16) -> Result<Display<TcpStream>, Error> {
+    let stream = TcpStream::connect(SocketAddr::from(([127, 0, 0, 1], X_TCP_PORT + display))).map_err(|_| Error::Stream)?;
 
-    stream.set_nonblocking(false)?;
+    stream.set_nonblocking(false).map_err(|_| Error::Stream)?;
 
-    Ok(Display::connect(stream)?)
+    Display::connect(stream)
 }
 
-pub fn open_unix<'a>(display: u16) -> Result<Display<UnixStream>, Box<dyn std::error::Error>> {
-    let stream = UnixStream::connect(format!("/tmp/.X11-unix/X{}", display))?;
+pub fn open_unix<'a>(display: u16) -> Result<Display<UnixStream>, Error> {
+    let stream = UnixStream::connect(format!("/tmp/.X11-unix/X{}", display)).map_err(|_| Error::Stream)?;
 
-    stream.set_nonblocking(false)?;
+    stream.set_nonblocking(false).map_err(|_| Error::Stream)?;
 
-    Ok(Display::connect(stream)?)
+    Display::connect(stream)
 }
 
 
