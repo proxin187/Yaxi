@@ -14,7 +14,10 @@ pub enum Error {
     FailedToLock,
     Stream,
     Utf8,
-    Spmc,
+    InvalidDisplay,
+    InvalidProtocol {
+        protocol: String,
+    },
     SetupFailed {
         reason: String,
     },
@@ -75,8 +78,11 @@ impl std::fmt::Display for Error {
             Error::Utf8 => {
                 f.write_str("invalid utf8")
             },
-            Error::Spmc => {
-                f.write_str("singe-producer multi-consumer implementation error")
+            Error::InvalidDisplay => {
+                f.write_str("invalid $DISPLAY format")
+            },
+            Error::InvalidProtocol { protocol } => {
+                f.write_fmt(format_args!("invalid protocol: {}", protocol))
             },
             Error::SetupFailed { reason } => {
                 f.write_fmt(format_args!("connection initiation setup failed: {}", reason))

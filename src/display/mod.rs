@@ -1,6 +1,7 @@
 pub(crate) mod error;
 pub(crate) mod auth;
 pub(crate) mod xid;
+pub(crate) mod parse;
 pub mod request;
 
 use crate::extension::Extension;
