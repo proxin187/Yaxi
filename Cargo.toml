@@ -1,6 +1,6 @@
 [package]
 name = "yaxi"
-version = "0.1.36"
+version = "0.1.37"
 edition = "2021"
 
 description = "A rust implementation of the x11 protocol"

@@ -1,10 +1,8 @@
-use yaxi::display;
+use yaxi::clipboard::Clipboard;
 
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut display = display::open_unix(0)?;
-
-    let mut clipboard = display.clipboard()?;
+    let mut clipboard = Clipboard::new()?;
 
     let text = clipboard.get_text()?;
 
