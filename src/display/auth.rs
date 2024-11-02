@@ -1,6 +1,7 @@
 use super::{Stream, Error};
 
 use std::fs::File;
+use std::sync::{Arc, Mutex};
 use std::env;
 use std::mem;
 
@@ -15,7 +16,7 @@ pub struct Entry {
 }
 
 pub struct XAuth {
-    file: Stream<File>,
+    file: Stream,
 }
 
 impl XAuth {
@@ -26,7 +27,7 @@ impl XAuth {
             .open(env::var("XAUTHORITY")?)?;
 
         Ok(XAuth {
-            file: Stream::new(file)?,
+            file: Stream::new(Arc::new(Mutex::new(file.try_clone()?)), Arc::new(Mutex::new(file))),
         })
     }
 

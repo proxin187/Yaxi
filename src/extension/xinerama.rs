@@ -1,8 +1,7 @@
 use crate::display::request::*;
+use crate::display::error::*;
 use crate::display::*;
 use crate::proto::*;
-
-use std::io::{Read, Write};
 
 
 #[non_exhaustive]
@@ -13,15 +12,15 @@ impl MinorOpcode {
     pub const QUERY_SCREENS: u8 = 5;
 }
 
-pub struct Xinerama<T: Send + Sync + Read + Write + TryClone> {
-    stream: Stream<T>,
+pub struct Xinerama {
+    stream: Stream,
     replies: Queue<Reply>,
     sequence: SequenceManager,
     major_opcode: u8,
 }
 
-impl<T> Xinerama<T> where T: Send + Sync + Read + Write + TryClone {
-    pub(crate) fn new(stream: Stream<T>, replies: Queue<Reply>, sequence: SequenceManager, major_opcode: u8) -> Xinerama<T> {
+impl Xinerama {
+    pub(crate) fn new(stream: Stream, replies: Queue<Reply>, sequence: SequenceManager, major_opcode: u8) -> Xinerama {
         Xinerama {
             stream,
             replies,

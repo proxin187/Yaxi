@@ -4,7 +4,6 @@ use crate::window::*;
 use crate::proto::*;
 
 use std::thread::{self, JoinHandle};
-use std::io::{Read, Write};
 use std::sync::{Arc, RwLock};
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -16,59 +15,70 @@ macro_rules! write {
 
 macro_rules! read {
     ($mutex:expr) => {
-        $mutex.write().map_err(|_| Error::FailedToLock)
+        $mutex.read().map_err(|_| Error::FailedToLock)
     }
 }
 
 #[derive(Clone)]
 struct ClipboardData {
-    bytes: Vec<u8>,
+    bytes: Option<Vec<u8>>,
     format: Atom,
 }
 
 impl ClipboardData {
     pub fn new() -> ClipboardData {
         ClipboardData {
-            bytes: Vec::new(),
+            bytes: None,
             format: Atom::new(0),
         }
     }
 
-    pub fn get(&self) -> Vec<u8> { self.bytes.clone() }
+    #[inline]
+    pub fn poll(&self) -> bool { self.bytes.is_some() }
 
+    #[inline]
+    pub fn reset(&mut self) { self.bytes = None }
+
+    #[inline]
+    pub fn get(&self) -> Vec<u8> { self.bytes.clone().unwrap_or_default() }
+
+    #[inline]
     pub fn set(&mut self, bytes: &[u8], format: Atom) {
-        self.bytes = bytes.to_vec();
+        self.bytes.replace(bytes.to_vec());
 
         self.format = format;
     }
 }
 
+#[derive(Clone)]
 struct Atoms {
     clipboard: Atom,
     utf8: Atom,
 }
 
-struct Target<T> where T: Send + Sync + Read + Write + TryClone {
-    window: Window<T>,
+#[derive(Clone)]
+struct Target {
+    window: Window,
     property: Atom,
 }
 
-pub struct Clipboard<T> where T: Send + Sync + Read + Write + TryClone {
-    display: Display<T>,
-    target: Target<T>,
+pub struct Clipboard {
+    display: Display,
+    target: Target,
     atoms: Atoms,
     data: Arc<RwLock<ClipboardData>>,
     listener: ListenerHandle,
 }
 
-impl<T> Drop for Clipboard<T> where T: Send + Sync + Read + Write + TryClone {
+impl Drop for Clipboard {
     fn drop(&mut self) {
         self.listener.kill();
     }
 }
 
-impl<T> Clipboard<T> where T: Send + Sync + Read + Write + TryClone + 'static {
-    pub fn new() -> Result<Clipboard<T>, Error> {
+impl Clipboard {
+    /// create a new clipboard helper instance
+    pub fn new() -> Result<Clipboard, Error> {
         let mut display = display::open_unix(0)?;
         let mut root = display.default_root_window()?;
 
@@ -94,7 +104,7 @@ impl<T> Clipboard<T> where T: Send + Sync + Read + Write + TryClone + 'static {
 
         let data = Arc::new(RwLock::new(ClipboardData::new()));
 
-        let listener = ListenerHandle::spawn(display.clone(), data.clone(), Arc::new(AtomicBool::new(false)));
+        let listener = ListenerHandle::spawn(display.clone(), target.clone(), atoms.clone(), data.clone(), Arc::new(AtomicBool::new(false)));
 
         Ok(Clipboard {
             display,
@@ -117,46 +127,30 @@ impl<T> Clipboard<T> where T: Send + Sync + Read + Write + TryClone + 'static {
     }
 
     fn get_selection(&mut self) -> Result<Vec<u8>, Error> {
+        write!(self.data)?.reset();
+
         self.target.window.convert_selection(self.atoms.clipboard, self.atoms.utf8, self.target.property)?;
 
-        loop {
-            println!("waiting for event");
+        while !read!(self.data)?.poll() {}
 
-            // TODO: its almost random, sometimes it works, other times it doesnt
-            //
-            // maybe its a deadlock?
-
-            match self.display.next_event()? {
-                Event::SelectionNotify { property, .. } => {
-                    println!("huh?: {:?}", property);
-
-                    let (bytes, _) = self.target.window.get_property(self.target.property, Atom::ANY_PROPERTY_TYPE, false)?;
-
-                    return property.is_null()
-                        .then(|| Ok(Vec::new()))
-                        .unwrap_or_else(|| Ok(bytes));
-                },
-                _ => {},
-            }
-        }
+        read!(self.data).map(|data| data.get())
     }
+
+    // TODO: this deadlocks if the owner terminates during the call
 
     /// get text from the clipboard
     pub fn get_text(&mut self) -> Result<String, Error> {
         let owner = self.display.get_selection_owner(self.atoms.clipboard)?;
 
-        if owner == self.target.window.id() {
-            self.to_string(read!(self.data)?.get())
-        } else if self.display.window_from_id(owner).is_ok() {
-            println!("ok?: {}", owner);
+        match self.display.window_from_id(owner) {
+            Ok(window) => {
+                let selection = (window.id() != self.target.window.id())
+                    .then(|| self.get_selection())
+                    .unwrap_or(read!(self.data).map(|data| data.get()))?;
 
-            let selection = self.get_selection()?;
-
-            println!("selection: {:?}", selection);
-
-            self.to_string(selection)
-        } else {
-            Ok(String::new())
+                self.to_string(selection)
+            },
+            Err(_) => Ok(String::new()),
         }
     }
 }
@@ -167,12 +161,12 @@ struct ListenerHandle {
 }
 
 impl ListenerHandle {
-    pub fn spawn<T: Send + Sync + Read + Write + TryClone + 'static>(display: Display<T>, data: Arc<RwLock<ClipboardData>>, kill: Arc<AtomicBool>) -> ListenerHandle {
+    pub fn spawn(display: Display, target: Target, atoms: Atoms, data: Arc<RwLock<ClipboardData>>, kill: Arc<AtomicBool>) -> ListenerHandle {
         let clone = kill.clone();
 
         ListenerHandle {
             thread: thread::spawn(move || -> Result<(), Error> {
-                let mut listener = Listener::new(display, data, clone);
+                let mut listener = Listener::new(display, target, atoms, data, clone);
 
                 listener.listen()
             }),
@@ -187,16 +181,20 @@ impl ListenerHandle {
     }
 }
 
-struct Listener<T> where T: Send + Sync + Read + Write + TryClone {
-    display: Display<T>,
+struct Listener {
+    display: Display,
+    target: Target,
+    atoms: Atoms,
     data: Arc<RwLock<ClipboardData>>,
     kill: Arc<AtomicBool>,
 }
 
-impl<T> Listener <T> where T: Send + Sync + Read + Write + TryClone + 'static {
-    pub fn new(display: Display<T>, data: Arc<RwLock<ClipboardData>>, kill: Arc<AtomicBool>) -> Listener<T> {
+impl Listener {
+    pub fn new(display: Display, target: Target, atoms: Atoms, data: Arc<RwLock<ClipboardData>>, kill: Arc<AtomicBool>) -> Listener {
         Listener {
             display,
+            target,
+            atoms,
             data,
             kill,
         }
@@ -206,7 +204,7 @@ impl<T> Listener <T> where T: Send + Sync + Read + Write + TryClone + 'static {
         Ok(target.id() == read!(self.data)?.format.id() && !property.is_null())
     }
 
-    pub fn handle_request(&mut self, time: u32, mut owner: Window<T>, selection: Atom, target: Atom, property: Atom) -> Result<(), Error> {
+    pub fn handle_request(&mut self, time: u32, mut owner: Window, selection: Atom, target: Atom, property: Atom) -> Result<(), Error> {
         if self.is_valid(target, property)? {
             let data = read!(self.data)?.get();
 
@@ -222,6 +220,8 @@ impl<T> Listener <T> where T: Send + Sync + Read + Write + TryClone + 'static {
         }, vec![], true)
     }
 
+    // TODO: the issue may be that this returns a error?
+
     pub fn listen(&mut self) -> Result<(), Error> {
         while !self.kill.load(Ordering::Relaxed) {
             if self.display.poll_event()? {
@@ -230,6 +230,15 @@ impl<T> Listener <T> where T: Send + Sync + Read + Write + TryClone + 'static {
                         let owner = self.display.window_from_id(owner)?;
 
                         self.handle_request(time, owner, selection, target, property)?;
+                    },
+                    Event::SelectionNotify { property, .. } => {
+                        let (bytes, _) = self.target.window.get_property(self.target.property, Atom::ANY_PROPERTY_TYPE, false)?;
+
+                        let bytes = property.is_null()
+                            .then(|| Vec::new())
+                            .unwrap_or_else(|| bytes);
+
+                        write!(self.data)?.set(&bytes, self.atoms.utf8);
                     },
                     _ => {},
                 }

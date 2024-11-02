@@ -1,10 +1,11 @@
 use crate::display::request::{self, *};
 use crate::display::error::Error;
-use crate::display::{Atom, Visual, Roots, Stream, TryClone};
+use crate::display::{Atom, Visual, Roots, Stream, Streamable};
 use crate::display::xid;
 use crate::proto::*;
 
 use std::io::{Read, Write};
+use std::sync::{Arc, Mutex};
 
 
 /// a builder for a list of values known as `LISTofVALUE` in proto.pdf
@@ -49,17 +50,17 @@ pub trait ValueMask {
 }
 
 /// representing value in a configure window request
-pub enum ConfigureValue<T: Send + Sync + Read + Write + TryClone> {
+pub enum ConfigureValue {
     X(u16),
     Y(u16),
     Width(u16),
     Height(u16),
     Border(u16),
-    Sibling(Window<T>),
+    Sibling(Window),
     StackMode(StackMode),
 }
 
-impl<T> ValueMask for ConfigureValue<T> where T: Send + Sync + Read + Write + TryClone {
+impl ValueMask for ConfigureValue {
     fn mask(&self) -> u32 {
         match self {
             ConfigureValue::X(_) => 0x1,
@@ -212,8 +213,9 @@ pub enum PropMode {
     Append = 2,
 }
 
-pub struct Window<T: Send + Sync + Read + Write + TryClone> {
-    stream: Stream<T>,
+#[derive(Clone)]
+pub struct Window {
+    stream: Stream,
     replies: Queue<Reply>,
     sequence: SequenceManager,
     visual: Visual,
@@ -221,21 +223,8 @@ pub struct Window<T: Send + Sync + Read + Write + TryClone> {
     id: u32,
 }
 
-impl<T> TryClone for Window<T> where T: Send + Sync + Read + Write + TryClone {
-    fn try_clone(&self) -> Result<Box<Self>, Error> {
-        Ok(Box::new(Window {
-            stream: self.stream.try_clone()?,
-            replies: self.replies.clone(),
-            sequence: self.sequence.clone(),
-            visual: self.visual.clone(),
-            depth: self.depth,
-            id: self.id,
-        }))
-    }
-}
-
-impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
-    pub fn new(stream: Stream<T>, replies: Queue<Reply>, sequence: SequenceManager, visual: Visual, depth: u8, id: u32) -> Window<T> {
+impl Window {
+    pub fn new(stream: Stream, replies: Queue<Reply>, sequence: SequenceManager, visual: Visual, depth: u8, id: u32) -> Window {
         Window {
             stream,
             replies,
@@ -247,12 +236,12 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
     }
 
     pub(crate) fn from_id(
-        mut stream: Stream<T>,
-        mut replies: Queue<Reply>,
+        mut stream: Stream,
+        replies: Queue<Reply>,
         mut sequence: SequenceManager,
         roots: Roots,
-        id: u32
-    ) -> Result<Window<T>, Error> {
+        id: u32,
+    ) -> Result<Window, Error> {
         sequence.append(ReplyKind::GetWindowAttributes)?;
 
         let screen = roots.first()?;
@@ -397,7 +386,7 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
     pub fn visual(&self) -> Visual { self.visual.clone() }
 
     /// create a child window with provided window arguments
-    pub fn create_window(&mut self, mut window: WindowArguments) -> Result<Window<T>, Error> {
+    pub fn create_window(&mut self, mut window: WindowArguments) -> Result<Window, Error> {
         self.sequence.skip();
 
         let window_values_request = window.values.build();
@@ -423,7 +412,7 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
 
         self.replies.poll_error()?;
 
-        Ok(Window::new(self.stream.try_clone()?, self.replies.clone(), self.sequence.clone(), window.visual, window.depth, wid))
+        Ok(Window::new(self.stream.clone(), self.replies.clone(), self.sequence.clone(), window.visual, window.depth, wid))
     }
 
     /// kill the window
@@ -475,7 +464,7 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
     }
 
     /// configure the window
-    pub fn configure(&mut self, mut values: ValuesBuilder<ConfigureValue<T>>) -> Result<(), Error> {
+    pub fn configure(&mut self, mut values: ValuesBuilder<ConfigureValue>) -> Result<(), Error> {
         self.sequence.skip();
 
         let request = values.build();
@@ -537,7 +526,7 @@ impl<T> Window<T> where T: Send + Sync + Read + Write + TryClone {
     }
 
     /// become the child of a parent window
-    pub fn reparent(&mut self, parent: Window<T>, x: u16, y: u16) -> Result<(), Error> {
+    pub fn reparent(&mut self, parent: Window, x: u16, y: u16) -> Result<(), Error> {
         self.sequence.skip();
 
         self.stream.send_encode(ReparentWindow {

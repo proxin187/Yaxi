@@ -1,6 +1,6 @@
 use std::time::SystemTime;
 
-use yaxi::display;
+use yaxi::clipboard::Clipboard;
 
 
 #[cfg(test)]
@@ -8,26 +8,16 @@ use yaxi::display;
 mod tests {
     use super::*;
 
-    #[test]
     fn test_clipboard_read_text() {
-        let mut display = display::open_unix(0).unwrap();
-
-        // it sometimes fails here
-        let mut clipboard = display.clipboard().unwrap();
+        let mut clipboard = Clipboard::new().unwrap();
 
         let result = clipboard.get_text();
 
         assert!(result.is_ok());
     }
 
-    // TODO: there is a problem here now
-    /*
-    #[test]
     fn test_clipboard_write_text() {
-        let mut display = display::open_unix(0).unwrap();
-
-        // it sometimes fails here
-        let mut clipboard = display.clipboard().unwrap();
+        let mut clipboard = Clipboard::new().unwrap();
 
         let now = SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -39,12 +29,8 @@ mod tests {
         assert!(result.is_ok());
     }
 
-    #[test]
     fn test_clipboard_text_consistency() {
-        let mut display = display::open_unix(0).unwrap();
-
-        // it sometimes fails here
-        let mut clipboard = display.clipboard().unwrap();
+        let mut clipboard = Clipboard::new().unwrap();
 
         let time = SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -59,7 +45,15 @@ mod tests {
         let text = clipboard.get_text().unwrap();
         assert_eq!(excepted, text);
     }
-    */
+
+    #[test]
+    fn run() {
+        test_clipboard_read_text();
+
+        test_clipboard_write_text();
+
+        test_clipboard_text_consistency();
+    }
 }
 
 

@@ -34,58 +34,33 @@ const X_TCP_PORT: u16 = 6000;
 const X_PROTOCOL: u16 = 11;
 const X_PROTOCOL_REVISION: u16 = 0;
 
-pub trait TryClone {
-    fn try_clone(&self) -> Result<Box<Self>, Error>;
+
+pub trait Streamable: Send + Sync + Read + Write {}
+
+impl Streamable for File {}
+impl Streamable for TcpStream {}
+impl Streamable for UnixStream {}
+
+pub struct Stream {
+    reader: Arc<Mutex<dyn Streamable>>,
+    writer: Arc<Mutex<dyn Streamable>>,
 }
 
-impl TryClone for File {
-    fn try_clone(&self) -> Result<Box<File>, Error> {
-        self.try_clone()
-            .map(|stream| Box::new(stream))
-            .map_err(|err| Error::Other { error: err.into() })
-    }
-}
-
-impl TryClone for TcpStream {
-    fn try_clone(&self) -> Result<Box<TcpStream>, Error> {
-        self.try_clone()
-            .map(|stream| Box::new(stream))
-            .map_err(|err| Error::Other { error: err.into() })
-    }
-}
-
-impl TryClone for UnixStream {
-    fn try_clone(&self) -> Result<Box<UnixStream>, Error> {
-        self.try_clone()
-            .map(|stream| Box::new(stream))
-            .map_err(|err| Error::Other { error: err.into() })
-    }
-}
-
-pub struct Stream<T> {
-    reader: Box<T>,
-    writer: Arc<Mutex<T>>,
-}
-
-impl<T> Clone for Stream<T> where T: Send + Sync + Read + Write + TryClone {
-    fn clone(&self) -> Stream<T> {
-        self.try_clone().expect("failed to clone")
-    }
-}
-
-impl<T> Stream<T> where T: Send + Sync + Read + Write + TryClone {
-    pub fn new(inner: T) -> Result<Stream<T>, Error> {
-        Ok(Stream {
-            reader: inner.try_clone()?,
-            writer: Arc::new(Mutex::new(inner)),
-        })
-    }
-
-    pub fn try_clone(&self) -> Result<Stream<T>, Error> {
-        Ok(Stream {
-            reader: self.reader.try_clone()?,
+impl Clone for Stream {
+    fn clone(&self) -> Stream {
+        Stream {
+            reader: self.reader.clone(),
             writer: self.writer.clone(),
-        })
+        }
+    }
+}
+
+impl Stream {
+    pub fn new(reader: Arc<Mutex<dyn Streamable>>, writer: Arc<Mutex<dyn Streamable>>) -> Stream {
+        Stream {
+            reader,
+            writer,
+        }
     }
 
     pub fn send(&mut self, request: &[u8]) -> Result<(), Error> {
@@ -119,9 +94,10 @@ impl<T> Stream<T> where T: Send + Sync + Read + Write + TryClone {
     }
 
     pub fn recv(&mut self, size: usize) -> Result<Vec<u8>, Error> {
+        let mut lock = lock!(self.reader)?;
         let mut buffer = vec![0u8; size];
 
-        match self.reader.read_exact(&mut buffer) {
+        match lock.read_exact(&mut buffer) {
             Ok(()) => Ok(buffer),
             Err(err) => Err(Error::Other { error: err.into() }),
         }
@@ -289,8 +265,8 @@ impl Roots {
     }
 }
 
-pub struct Display<T> where T: Send + Sync + Read + Write + TryClone {
-    pub(crate) stream: Stream<T>,
+pub struct Display {
+    pub(crate) stream: Stream,
     pub(crate) events: Queue<Event>,
     pub(crate) replies: Queue<Reply>,
     pub(crate) roots: Roots,
@@ -298,10 +274,10 @@ pub struct Display<T> where T: Send + Sync + Read + Write + TryClone {
     pub(crate) sequence: SequenceManager,
 }
 
-/*
-impl<T> Clone for Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
-    /// get a thread safe clone of the display
-    fn clone(&self) -> Display<T> {
+impl Clone for Display {
+    /// get a thread safe clone of the display, this still points to the same event queue so
+    /// listening for events in multiple threads is a bad and unreliable idea
+    fn clone(&self) -> Display {
         Display {
             stream: self.stream.clone(),
             events: self.events.clone(),
@@ -312,14 +288,13 @@ impl<T> Clone for Display<T> where T: Send + Sync + Read + Write + TryClone + 's
         }
     }
 }
-*/
 
-impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
-    pub fn connect<'a>(inner: T) -> Result<Display<T>, Error> {
+impl Display {
+    pub fn connect<'a>(stream: Stream) -> Result<Display, Error> {
         let errors: Arc<Mutex<Vec<Error>>> = Arc::new(Mutex::new(Vec::new()));
 
         let mut display = Display {
-            stream: Stream::new(inner)?,
+            stream,
             events: Queue::new(errors.clone()),
             replies: Queue::new(errors.clone()),
             roots: Roots::new(),
@@ -332,15 +307,6 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
         Ok(display)
     }
 
-    /*
-    /// get the clipboard interface
-
-    #[cfg(feature = "clipboard")]
-    pub fn clipboard(&mut self) -> Result<crate::clipboard::Clipboard<T>, Error> {
-        crate::clipboard::Clipboard::new(self.clone())
-    }
-    */
-
     /// wait for the next event
     pub fn next_event(&mut self) -> Result<Event, Error> {
         self.events.wait()
@@ -352,15 +318,15 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
     }
 
     /// get the window from its id
-    pub fn window_from_id(&self, id: u32) -> Result<Window<T>, Error> {
+    pub fn window_from_id(&self, id: u32) -> Result<Window, Error> {
         Window::from_id(self.stream.clone(), self.replies.clone(), self.sequence.clone(), self.roots.clone(), id)
     }
 
     /// get the default root window of a display
-    pub fn default_root_window(&self) -> Result<Window<T>, Error> {
+    pub fn default_root_window(&self) -> Result<Window, Error> {
         let screen = self.roots.first()?;
 
-        Ok(Window::<T>::new(self.stream.clone(), self.replies.clone(), self.sequence.clone(), self.roots.visual_from_id(screen.response.root_visual)?, screen.response.root_depth, screen.response.root))
+        Ok(Window::new(self.stream.clone(), self.replies.clone(), self.sequence.clone(), self.roots.visual_from_id(screen.response.root_visual)?, screen.response.root_depth, screen.response.root))
     }
 
     /// query an extension and if its active get its major opcode
@@ -550,7 +516,7 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
             self.roots.push(screen);
         }
 
-        let stream = self.stream.try_clone()?;
+        let stream = self.stream.clone();
         let events = self.events.clone();
         let replies = self.replies.clone();
         let sequence = self.sequence.clone();
@@ -589,16 +555,16 @@ impl<T> Display<T> where T: Send + Sync + Read + Write + TryClone + 'static {
     }
 }
 
-pub struct EventListener<T: Send + Sync + Read + Write + TryClone> {
-    stream: Stream<T>,
+pub struct EventListener {
+    stream: Stream,
     events: Queue<Event>,
     replies: Queue<Reply>,
     sequence: SequenceManager,
     roots: Roots,
 }
 
-impl<T> EventListener<T> where T: Send + Sync + Read + Write + TryClone {
-    pub fn new(stream: Stream<T>, events: Queue<Event>, replies: Queue<Reply>, sequence: SequenceManager, roots: Roots) -> EventListener<T> {
+impl EventListener {
+    pub fn new(stream: Stream, events: Queue<Event>, replies: Queue<Reply>, sequence: SequenceManager, roots: Roots) -> EventListener {
         EventListener {
             stream,
             events,
@@ -894,7 +860,7 @@ impl<T> EventListener<T> where T: Send + Sync + Read + Write + TryClone {
                     event: event.event,
                     window: event.window,
                     x: event.x,
-                    y: event.y,
+                    y: event.y
                 })
             },
             Response::CIRCULATE_NOTIFY => {
@@ -979,20 +945,20 @@ impl<T> EventListener<T> where T: Send + Sync + Read + Write + TryClone {
     }
 }
 
-pub fn open_tcp<'a>(display: u16) -> Result<Display<TcpStream>, Error> {
-    let stream = TcpStream::connect(SocketAddr::from(([127, 0, 0, 1], X_TCP_PORT + display))).map_err(|_| Error::Stream)?;
+pub fn open_tcp<'a>(display: u16) -> Result<Display, Error> {
+    let tcp_stream = TcpStream::connect(SocketAddr::from(([127, 0, 0, 1], X_TCP_PORT + display))).map_err(|_| Error::Stream)?;
 
-    stream.set_nonblocking(false).map_err(|_| Error::Stream)?;
+    tcp_stream.set_nonblocking(false).map_err(|_| Error::Stream)?;
 
-    Display::connect(stream)
+    Display::connect(Stream::new(Arc::new(Mutex::new(tcp_stream.try_clone().map_err(|_| Error::Stream)?)), Arc::new(Mutex::new(tcp_stream))))
 }
 
-pub fn open_unix<'a>(display: u16) -> Result<Display<UnixStream>, Error> {
-    let stream = UnixStream::connect(format!("/tmp/.X11-unix/X{}", display)).map_err(|_| Error::Stream)?;
+pub fn open_unix<'a>(display: u16) -> Result<Display, Error> {
+    let unix_stream = UnixStream::connect(format!("/tmp/.X11-unix/X{}", display)).map_err(|_| Error::Stream)?;
 
-    stream.set_nonblocking(false).map_err(|_| Error::Stream)?;
+    unix_stream.set_nonblocking(false).map_err(|_| Error::Stream)?;
 
-    Display::connect(stream)
+    Display::connect(Stream::new(Arc::new(Mutex::new(unix_stream.try_clone().map_err(|_| Error::Stream)?)), Arc::new(Mutex::new(unix_stream))))
 }
 
 
