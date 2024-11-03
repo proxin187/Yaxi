@@ -357,7 +357,7 @@ impl Display {
     /// query for the xinerama extension and return a structure with its methods
 
     #[cfg(feature = "xinerama")]
-    pub fn query_xinerama(&mut self) -> Result<Xinerama<T>, Error> {
+    pub fn query_xinerama(&mut self) -> Result<Xinerama, Error> {
         let extension = self.query_extension(Extension::Xinerama)?;
 
         Ok(Xinerama::new(self.stream.clone(), self.replies.clone(), self.sequence.clone(), extension.major_opcode))
