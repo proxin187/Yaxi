@@ -3,7 +3,7 @@ use crate::display::error::Error;
 use crate::display::Atom;
 use crate::keyboard::Keysym;
 
-use std::sync::atomic::{Ordering, AtomicU16, AtomicBool};
+use std::sync::atomic::{Ordering, AtomicU16};
 use std::sync::{Arc, Mutex};
 
 macro_rules! lock {
@@ -128,96 +128,6 @@ impl From<u8> for ErrorCode {
         }
     }
 }
-
-/*
-type Consumers<T> = Vec<Option<Queue<T>>>;
-
-/// MultiConsumer is a single-producer multi-consumer queue implementation
-
-#[derive(Debug)]
-pub struct MultiConsumer<T: std::fmt::Debug + Clone> {
-    consumers: Arc<Mutex<Consumers<T>>>,
-    idx: usize,
-}
-
-impl<T> Drop for MultiConsumer<T> where T: std::fmt::Debug + Clone {
-    fn drop(&mut self) {
-        let mut lock = lock!(self.consumers).expect("failed to lock");
-
-        lock[self.idx] = None;
-    }
-}
-
-impl<T> MultiConsumer<T> where T: std::fmt::Debug + Clone {
-    pub fn new(errors: Arc<Mutex<Vec<Error>>>) -> MultiConsumer<T> {
-        MultiConsumer {
-            consumers: Arc::new(Mutex::new(vec![Some(Queue::new(errors))])),
-            idx: 0,
-        }
-    }
-
-    pub fn clone(&self) -> Result<MultiConsumer<T>, Error> {
-        let consumer = lock!(self.consumers)?[self.idx].clone();
-
-        lock!(self.consumers)?.push(consumer);
-
-        Ok(MultiConsumer {
-            consumers: self.consumers.clone(),
-            idx: lock!(self.consumers)?.len() - 1,
-        })
-    }
-
-    fn update(&mut self) -> Result<(), Error> {
-        let mut lock = lock!(self.consumers)?;
-
-        if self.idx >= lock.len() - 1 {
-            if let Some(idx) = lock.iter().enumerate().filter_map(|(idx, c)| c.is_none().then(|| idx)).next() {
-                lock[idx] = lock.remove(self.idx);
-
-                self.idx = idx;
-            }
-        }
-
-        Ok(())
-    }
-
-    fn clone_consumer(&mut self, idx: usize) -> Result<Queue<T>, Error> {
-        lock!(self.consumers)?[idx].clone().ok_or(Error::Spmc)
-    }
-
-    #[inline]
-    pub fn push(&mut self, element: T) -> Result<(), Error> {
-        self.update()?;
-
-        // TODO: maybe we should just remove multi threading?
-        // TODO: yes we are going to remove buitin multi threading support as it should rather be
-        // up to the user to implement such a feature
-        println!("consumer: {:?}, idx: {}", lock!(self.consumers)?, self.idx);
-
-        for queue in lock!(self.consumers)?.iter_mut() {
-            if let Some(queue) = queue {
-                queue.push(element.clone())?;
-            }
-        }
-
-        Ok(())
-    }
-
-    #[inline]
-    pub fn poll(&mut self) -> Result<bool, Error> {
-        self.update()?;
-
-        self.clone_consumer(self.idx)?.poll()
-    }
-
-    #[inline]
-    pub fn wait(&mut self) -> Result<T, Error> {
-        self.update()?;
-
-        self.clone_consumer(self.idx)?.wait()
-    }
-}
-*/
 
 /// queue is a single-producer single-consumer queue implementation
 

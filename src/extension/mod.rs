@@ -20,7 +20,7 @@ impl ToString for Extension {
 
 impl Extension {
     pub fn len(&self) -> usize {
-        self.to_string().len()
+        self.to_string().as_bytes().len()
     }
 }
 

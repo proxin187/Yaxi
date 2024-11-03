@@ -580,7 +580,7 @@ impl Window {
             data_len: format.encode(data.len()),
         };
 
-        self.stream.send(&[request::encode(&request), data].concat())?;
+        self.stream.send(&[request::encode(&request), data, &vec![0u8; request::pad(data.len())]].concat())?;
 
         self.replies.poll_error()
     }
