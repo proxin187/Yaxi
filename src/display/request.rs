@@ -279,14 +279,11 @@ pub struct MapReq {
     pub pad0: [u8; 20],
 }
 
-// TODO: IMPLEMENT CLIENT MESSAGE
-
 #[repr(packed, C)]
 #[derive(Debug)]
 pub struct ClientMessage {
     pub window: u32,
     pub type_: u32,
-    pub data: [u8; 20],
 }
 
 #[repr(packed, C)]

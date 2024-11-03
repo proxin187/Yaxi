@@ -280,13 +280,15 @@ impl Window {
             event_mask: event_mask.iter().fold(0, |acc, mask| acc | *mask as u32),
         };
 
+        let data = event.encode();
+
         let generic_event = GenericEvent {
             opcode: event.opcode(),
-            detail: 0,
+            detail: data.detail,
             sequence: 0,
         };
 
-        self.stream.send(&[request::encode(&request).to_vec(), request::encode(&generic_event).to_vec(), Into::<Vec<u8>>::into(event)].concat())?;
+        self.stream.send(&[request::encode(&request).to_vec(), request::encode(&generic_event).to_vec(), data.event].concat())?;
 
         self.replies.poll_error()
     }

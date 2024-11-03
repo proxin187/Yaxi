@@ -568,6 +568,23 @@ pub enum EventKind {
     Release,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum ClientMessageData {
+    Byte([u8; 20]),
+    Short([u16; 10]),
+    Long([u32; 5]),
+}
+
+impl ClientMessageData {
+    pub fn encode(&self) -> Vec<u8> {
+        match self {
+            ClientMessageData::Byte(bytes) => bytes.to_vec(),
+            ClientMessageData::Short(shorts) => request::encode(shorts).to_vec(),
+            ClientMessageData::Long(longs) => request::encode(longs).to_vec(),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum Event {
     KeyEvent {
@@ -714,6 +731,7 @@ pub enum Event {
         format: u8,
         window: u32,
         type_: Atom,
+        data: ClientMessageData,
     },
     MappingNotify {
         request: u8,
@@ -722,25 +740,45 @@ pub enum Event {
     },
 }
 
-impl Into<Vec<u8>> for Event {
-    fn into(self) -> Vec<u8> {
-        match self {
-            Event::SelectionNotify { time, requestor, selection, target, property } => {
-                request::encode(&SelectionNotify {
-                    time,
-                    requestor,
-                    selection: selection.id(),
-                    target: target.id(),
-                    property: property.id(),
-                    pad0: [0u8; 8],
-                }).to_vec()
-            },
-            _ => unimplemented!("not all events are implemented for send event yet"),
+pub struct SendEventData {
+    pub(crate) detail: u8,
+    pub(crate) event: Vec<u8>,
+}
+
+impl SendEventData {
+    pub fn new(detail: u8, event: Vec<u8>) -> SendEventData {
+        SendEventData {
+            detail,
+            event,
         }
     }
 }
 
 impl Event {
+    pub fn encode(&self) -> SendEventData {
+        match self {
+            Event::SelectionNotify { time, requestor, selection, target, property } => {
+                SendEventData::new(0, request::encode(&SelectionNotify {
+                    time: *time,
+                    requestor: *requestor,
+                    selection: selection.id(),
+                    target: target.id(),
+                    property: property.id(),
+                    pad0: [0u8; 8],
+                }).to_vec())
+            },
+            Event::ClientMessage { format, window, type_, data } => {
+                let event = ClientMessage {
+                    window: *window,
+                    type_: type_.id(),
+                };
+
+                SendEventData::new(*format, [request::encode(&event).to_vec(), data.encode()].concat())
+            },
+            _ => unimplemented!("not all events are implemented for send event yet"),
+        }
+    }
+
     pub fn opcode(&self) -> u8 {
         match self {
             Event::KeyEvent { kind, .. } => match kind {
