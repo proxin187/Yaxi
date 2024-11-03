@@ -34,13 +34,13 @@
 This example opens a window and waits for a keyboard press before it quits:
 
 ```rust
-use yaxi::window::{PropFormat, PropMode, WindowArguments, ValuesBuilder, WindowKind};
+use yaxi::window::{WindowArguments, ValuesBuilder, WindowKind};
 use yaxi::proto::{Event, WindowClass, EventMask};
 use yaxi::display;
 
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut display = display::open_unix(0)?;
+    let mut display = display::open(None)?;
 
     let mut root = display.default_root_window()?;
 
@@ -75,6 +75,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
+
+
 ```
 
 ## License

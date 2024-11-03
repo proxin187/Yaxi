@@ -38,12 +38,24 @@ pub struct DisplayInfo {
     pub screen: u16,
 }
 
+impl DisplayInfo {
+    pub fn new(host: String, protocol: Protocol, display: u16, screen: u16) -> DisplayInfo {
+        DisplayInfo {
+            host,
+            protocol,
+            display,
+            screen,
+        }
+    }
+}
+
 #[derive(PartialEq)]
 pub enum State {
     Host,
     Protocol,
     Display,
     Screen,
+    Unix,
     Finished,
 }
 
@@ -88,7 +100,7 @@ pub struct Parser<'a> {
 
 impl<'a> Parser<'a> {
     pub fn new(display: &'a str) -> Parser<'a> {
-        Parser {
+    Parser {
             iter: Iter::new(display.chars().peekable()),
             display: DisplayInfo::default(),
             state: State::Host,
@@ -101,14 +113,17 @@ impl<'a> Parser<'a> {
                 State::Host => {
                     self.display.host = self.iter.take_while(|c| *c != ':' && *c != '/')?.iter().collect();
 
-                    match self.iter.next()? {
-                        ':' => self.state = State::Display,
-                        '/' => self.state = State::Protocol,
+                    match (self.display.host.as_str(), self.iter.next()?) {
+                        ("unix", _) => self.state = State::Unix,
+                        (_, ':') => self.state = State::Display,
+                        (_, '/') => self.state = State::Protocol,
                         _ => unreachable!(),
                     }
                 },
                 State::Protocol => {
                     self.display.protocol = Protocol::from(self.iter.take_while(|c| *c != ':')?.iter().collect())?;
+
+                    self.iter.next()?;
 
                     self.state = State::Display;
                 },
@@ -122,6 +137,13 @@ impl<'a> Parser<'a> {
                 },
                 State::Screen => {
                     self.display.screen = self.iter.take_while(|c| *c != '.')?.iter().collect::<String>().parse::<u16>().map_err(|_| Error::InvalidDisplay)?;
+
+                    self.state = State::Finished;
+                },
+                State::Unix => {
+                    self.display.host = self.iter.take_while(|_| true)?.iter().collect();
+
+                    self.state = State::Finished;
                 },
                 _ => {},
             }
@@ -131,35 +153,43 @@ impl<'a> Parser<'a> {
     }
 }
 
-// TODO: FINSIH THIS
-pub fn parse<'a>(display: &'a str) {
+/// parse the DISPLAY env or provided string
+pub fn parse<'a>(display: Option<&'a str>) -> Result<DisplayInfo, Error> {
+    let env = env::var("DISPLAY").map_err(|_| Error::InvalidDisplay)?;
+
+    Parser::new(display.unwrap_or(&env)).parse()
 }
 
-/*
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::display::parse::{self, *};
 
     #[test]
-    fn test_simple() {
-        let display = Parser::parse(Some(String::from(":69"))).unwrap();
+    fn test_simple() -> Result<(), Error> {
+        let display = parse::parse(Some(":69"))?;
 
-        assert_eq!(display, ParseDisplay::new(None, Protocol::UnixSocket, 69, 0));
+        assert_eq!(display, DisplayInfo::new(String::new(), Protocol::UnixSocket, 69, 0));
+
+        Ok(())
     }
 
     #[test]
-    fn test_unix() {
-        let display = ParseDisplay::parse(Some(String::from("unix:/some/file/path"))).unwrap();
+    fn test_unix() -> Result<(), Error> {
+        let display = parse::parse(Some("unix:/some/file/path"))?;
 
-        assert_eq!(display, ParseDisplay::new(Some(String::from("/some/file/path")), Protocol::UnixSocket, 0, 0));
+        assert_eq!(display, DisplayInfo::new(String::from("/some/file/path"), Protocol::UnixSocket, 0, 0));
+
+        Ok(())
     }
 
     #[test]
-    fn test_tcp() {
-        let display = ParseDisplay::parse(Some(String::from("13.37.13.37/tcp:69.420"))).unwrap();
+    fn test_tcp() -> Result<(), Error> {
+        let display = parse::parse(Some("13.37.13.37/tcp:69.420"))?;
 
-        assert_eq!(display, ParseDisplay::new(Some(String::from("/some/file/path")), Protocol::UnixSocket, 0, 0));
+        assert_eq!(display, DisplayInfo::new(String::from("13.37.13.37"), Protocol::TcpSocket, 69, 420));
+
+        Ok(())
     }
 }
-*/
+
 

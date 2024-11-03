@@ -13,15 +13,17 @@ use crate::proto::*;
 use crate::window::*;
 use crate::keyboard::*;
 
-use request::*;
 use error::Error;
+use parse::Protocol;
+use request::*;
 
 use std::os::unix::net::UnixStream;
-use std::net::{SocketAddr, TcpStream};
+use std::net::{SocketAddr, TcpStream, IpAddr};
 use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
 use std::fs::File;
 use std::thread;
+use std::str::FromStr;
 
 // https://www.x.org/docs/XProtocol/proto.pdf
 
@@ -946,20 +948,32 @@ impl EventListener {
     }
 }
 
-pub fn open_tcp<'a>(display: u16) -> Result<Display, Error> {
-    let tcp_stream = TcpStream::connect(SocketAddr::from(([127, 0, 0, 1], X_TCP_PORT + display))).map_err(|_| Error::Stream)?;
+fn open_tcp<'a>(host: SocketAddr) -> Result<Display, Error> {
+    let tcp_stream = TcpStream::connect(host).map_err(|_| Error::Stream)?;
 
     tcp_stream.set_nonblocking(false).map_err(|_| Error::Stream)?;
 
     Display::connect(Stream::new(Arc::new(Mutex::new(tcp_stream.try_clone().map_err(|_| Error::Stream)?)), Arc::new(Mutex::new(tcp_stream))))
 }
 
-pub fn open_unix<'a>(display: u16) -> Result<Display, Error> {
-    let unix_stream = UnixStream::connect(format!("/tmp/.X11-unix/X{}", display)).map_err(|_| Error::Stream)?;
+fn open_unix<'a>(path: String) -> Result<Display, Error> {
+    let unix_stream = UnixStream::connect(path).map_err(|_| Error::Stream)?;
 
     unix_stream.set_nonblocking(false).map_err(|_| Error::Stream)?;
 
     Display::connect(Stream::new(Arc::new(Mutex::new(unix_stream.try_clone().map_err(|_| Error::Stream)?)), Arc::new(Mutex::new(unix_stream))))
+}
+
+/// open a display with its $DISPLAY environment variable or a string
+pub fn open(display: Option<&str>) -> Result<Display, Error> {
+    let info = parse::parse(display)?;
+
+    match (info.protocol, info.host.is_empty()) {
+        (Protocol::TcpSocket, true) => open_tcp(SocketAddr::from(([127, 0, 0, 1], X_TCP_PORT + info.display))),
+        (Protocol::UnixSocket, true) => open_unix(format!("/tmp/.X11-unix/X{}", info.display)),
+        (Protocol::TcpSocket, false) => open_tcp(SocketAddr::from((IpAddr::from_str(&info.host).map_err(|_| Error::InvalidDisplay)?, X_TCP_PORT + info.display))),
+        (Protocol::UnixSocket, false) => open_unix(info.host),
+    }
 }
 
 

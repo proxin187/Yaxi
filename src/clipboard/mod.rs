@@ -78,8 +78,8 @@ impl Drop for Clipboard {
 
 impl Clipboard {
     /// create a new clipboard helper instance
-    pub fn new() -> Result<Clipboard, Error> {
-        let mut display = display::open_unix(0)?;
+    pub fn new(display: Option<&str>) -> Result<Clipboard, Error> {
+        let mut display = display::open(display)?;
         let mut root = display.default_root_window()?;
 
         let target = Target {

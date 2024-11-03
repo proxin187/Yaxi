@@ -9,7 +9,7 @@ mod tests {
     use super::*;
 
     fn test_clipboard_read_text() {
-        let mut clipboard = Clipboard::new().unwrap();
+        let mut clipboard = Clipboard::new(None).unwrap();
 
         let result = clipboard.get_text();
 
@@ -17,7 +17,7 @@ mod tests {
     }
 
     fn test_clipboard_write_text() {
-        let mut clipboard = Clipboard::new().unwrap();
+        let mut clipboard = Clipboard::new(None).unwrap();
 
         let now = SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -30,7 +30,7 @@ mod tests {
     }
 
     fn test_clipboard_text_consistency() {
-        let mut clipboard = Clipboard::new().unwrap();
+        let mut clipboard = Clipboard::new(None).unwrap();
 
         let time = SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
