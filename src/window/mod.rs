@@ -268,6 +268,22 @@ impl Window {
         }
     }
 
+    /// check if a window property contains any of the provided atoms, the primary usage for this is checking the window type with _NET_WM_WINDOW_TYPE
+    /// NOTE: using this function in combination with a property that is not the ATOM[]/32 type will result in a undefined result
+
+    #[cfg(feature = "extras")]
+    pub fn property_contains(&mut self, property: Atom, atoms: &[Atom]) -> Result<bool, Error> {
+        let (mut data, _) = self.get_property(property, Atom::ATOM, false)?;
+
+        data.resize(data.len().max(4), 0);
+
+        let result = data.windows(4)
+            .map(|chunk| Atom::new(u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]])))
+            .any(|value| atoms.contains(&value));
+
+        Ok(result)
+    }
+
     /// send an event to the window
     pub fn send_event(&mut self, event: Event, event_mask: Vec<EventMask>, propogate: bool) -> Result<(), Error> {
         self.sequence.skip();
