@@ -123,7 +123,7 @@ impl Stream {
 
 /// an atom in the x11 protocol is an integer representing a string
 /// atoms in the range 1..=68 are predefined (only 1..=20 implemented so far)
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Atom {
     id: u32,
 }
