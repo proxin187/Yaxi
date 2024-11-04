@@ -130,7 +130,7 @@ pub struct ErrorEvent {
     pub bad_value: u32,
     pub minor_opcode: u16,
     pub major_opcode: u8,
-    pub pad0: u8,
+    pub pad0: [u8; 21],
 }
 
 #[repr(packed, C)]
