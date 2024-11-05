@@ -1,6 +1,7 @@
 use crate::display::request::{self, *};
 use crate::display::error::Error;
 use crate::display::Atom;
+use crate::window::ConfigureValue;
 use crate::keyboard::Keysym;
 
 use std::sync::atomic::{Ordering, AtomicU16};
@@ -681,16 +682,8 @@ pub enum Event {
         override_redirect: bool,
     },
     ConfigureRequest {
-        stack_mode: StackMode,
-        parent: u32,
         window: u32,
-        sibling: u32,
-        x: u16,
-        y: u16,
-        width: u16,
-        height: u16,
-        border_width: u16,
-        mask: u16,
+        values: Vec<ConfigureValue>,
     },
     GravityNotify {
         event: u32,

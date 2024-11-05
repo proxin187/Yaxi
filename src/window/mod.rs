@@ -50,13 +50,15 @@ pub trait ValueMask {
 }
 
 /// representing value in a configure window request
+
+#[derive(Debug, Clone)]
 pub enum ConfigureValue {
     X(u16),
     Y(u16),
     Width(u16),
     Height(u16),
     Border(u16),
-    Sibling(Window),
+    Sibling(u32),
     StackMode(StackMode),
 }
 
@@ -81,7 +83,7 @@ impl ValueMask for ConfigureValue {
                 | ConfigureValue::Height(value)
                 | ConfigureValue::Border(value) => request::encode(&(*value as u32)).to_vec(),
 
-            ConfigureValue::Sibling(window) => request::encode(&window.id()).to_vec(),
+            ConfigureValue::Sibling(window) => request::encode(&window).to_vec(),
 
             ConfigureValue::StackMode(stack_mode) => request::encode(&(*stack_mode as u32)).to_vec(),
         }

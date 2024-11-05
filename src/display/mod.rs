@@ -843,17 +843,25 @@ impl EventListener {
             Response::CONFIGURE_REQUEST => {
                 let event: ConfigReq = self.stream.recv_decode()?;
 
+                let mut values: Vec<ConfigureValue> = Vec::new();
+
+                for bit in 0..16 {
+                    if ((event.value_mask & (0x1 << bit)) >> bit) == 0x1 {
+                        match bit {
+                            0x1 => values.push(ConfigureValue::X(event.x)),
+                            0x2 => values.push(ConfigureValue::Y(event.y)),
+                            0x4 => values.push(ConfigureValue::Width(event.width)),
+                            0x8 => values.push(ConfigureValue::Height(event.height)),
+                            0x10 => values.push(ConfigureValue::Border(event.border_width)),
+                            0x20 => values.push(ConfigureValue::Sibling(event.sibling)),
+                            _ => {},
+                        }
+                    }
+                }
+
                 self.events.push(Event::ConfigureRequest {
-                    stack_mode: StackMode::from(generic.detail),
-                    parent: event.parent,
                     window: event.window,
-                    sibling: event.sibling,
-                    x: event.x,
-                    y: event.y,
-                    width: event.height,
-                    height: event.height,
-                    border_width: event.border_width,
-                    mask: event.value_mask,
+                    values,
                 })
             },
             Response::GRAVITY_NOTIFY => {
