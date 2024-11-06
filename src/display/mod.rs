@@ -847,7 +847,7 @@ impl EventListener {
 
                 for bit in 0..16 {
                     if ((event.value_mask & (0x1 << bit)) >> bit) == 0x1 {
-                        match bit {
+                        match 1 << bit {
                             0x1 => values.push(ConfigureValue::X(event.x)),
                             0x2 => values.push(ConfigureValue::Y(event.y)),
                             0x4 => values.push(ConfigureValue::Width(event.width)),
