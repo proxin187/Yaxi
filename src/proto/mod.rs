@@ -338,6 +338,8 @@ impl From<u8> for Place {
         match value {
             0 => Place::Top,
             1 => Place::Bottom,
+            // TODO: there was some random error here
+            // TODO: FIX THIS
             _ => unreachable!(),
         }
     }
