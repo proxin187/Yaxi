@@ -13,7 +13,7 @@
 //! adding `yaxi` to your dependencies in `Cargo.toml`:
 //! ```toml
 //! [dependencies]
-//! yaxi = "0.1.44"
+//! yaxi = "0.1.45"
 //! ```
 //!
 //! Or running the following Cargo command in your project directory:

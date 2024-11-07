@@ -1024,12 +1024,14 @@ impl EventListener {
                 Ok(())
             }
             Response::CLIENT_MESSAGE => {
-                let event: CircReq = self.stream.recv_decode()?;
+                let event: ClientMessage = self.stream.recv_decode()?;
+                let data: [u8; 20] = self.stream.recv_decode()?;
 
-                self.events.push(Event::CirculateRequest {
-                    parent: event.event,
+                self.events.push(Event::ClientMessage {
+                    format: generic.detail,
                     window: event.window,
-                    place: Place::from(event.place),
+                    type_: Atom::new(event.type_),
+                    data: ClientMessageData::Byte(data),
                 })
             }
             Response::MAPPING_NOTIFY => {
