@@ -1,42 +1,41 @@
-pub(crate) mod error;
 pub(crate) mod auth;
-pub(crate) mod xid;
+pub(crate) mod error;
 pub(crate) mod parse;
 pub mod request;
+pub(crate) mod xid;
 
 use crate::extension::Extension;
 
 #[cfg(feature = "xinerama")]
 use crate::extension::xinerama::Xinerama;
 
+use crate::keyboard::*;
 use crate::proto::*;
 use crate::window::*;
-use crate::keyboard::*;
 
 use error::Error;
 use parse::Protocol;
 use request::*;
 
-use std::os::unix::net::UnixStream;
-use std::net::{SocketAddr, TcpStream, IpAddr};
-use std::io::{Read, Write};
-use std::sync::{Arc, Mutex};
 use std::fs::File;
-use std::thread;
+use std::io::{Read, Write};
+use std::net::{IpAddr, SocketAddr, TcpStream};
+use std::os::unix::net::UnixStream;
 use std::str::FromStr;
+use std::sync::{Arc, Mutex};
+use std::thread;
 
 // https://www.x.org/docs/XProtocol/proto.pdf
 
 macro_rules! lock {
     ($mutex:expr) => {
         $mutex.lock().map_err(|_| Error::FailedToLock)
-    }
+    };
 }
 
 const X_TCP_PORT: u16 = 6000;
 const X_PROTOCOL: u16 = 11;
 const X_PROTOCOL_REVISION: u16 = 0;
-
 
 pub trait Streamable: Send + Sync + Read + Write {}
 
@@ -60,23 +59,22 @@ impl Clone for Stream {
 
 impl Stream {
     pub fn new(reader: Arc<Mutex<dyn Streamable>>, writer: Arc<Mutex<dyn Streamable>>) -> Stream {
-        Stream {
-            reader,
-            writer,
-        }
+        Stream { reader, writer }
     }
 
     pub fn send(&mut self, request: &[u8]) -> Result<(), Error> {
         let mut lock = lock!(self.writer)?;
 
-        lock.write_all(request).map_err(|err| Error::Other { error: err.into() })
+        lock.write_all(request)
+            .map_err(|err| Error::Other { error: err.into() })
     }
 
     pub fn send_arr(&mut self, requests: &[Vec<u8>]) -> Result<(), Error> {
         let mut lock = lock!(self.writer)?;
 
         for request in requests {
-            lock.write_all(request).map_err(|err| Error::Other { error: err.into() })?;
+            lock.write_all(request)
+                .map_err(|err| Error::Other { error: err.into() })?;
         }
 
         Ok(())
@@ -85,9 +83,11 @@ impl Stream {
     pub fn send_pad(&mut self, request: &[u8]) -> Result<(), Error> {
         let mut lock = lock!(self.writer)?;
 
-        lock.write_all(request).map_err(|err| Error::Other { error: err.into() })?;
+        lock.write_all(request)
+            .map_err(|err| Error::Other { error: err.into() })?;
 
-        lock.write_all(&vec![0u8; request::pad(request.len())]).map_err(|err| Error::Other { error: err.into() })?;
+        lock.write_all(&vec![0u8; request::pad(request.len())])
+            .map_err(|err| Error::Other { error: err.into() })?;
 
         Ok(())
     }
@@ -156,16 +156,18 @@ impl Atom {
 
     /// create a new atom from its id
     pub const fn new(id: u32) -> Atom {
-        Atom {
-            id,
-        }
+        Atom { id }
     }
 
     /// get the id of the atom
-    pub fn id(&self) -> u32 { self.id }
+    pub fn id(&self) -> u32 {
+        self.id
+    }
 
     /// returns true of the atom is null
-    pub fn is_null(&self) -> bool { self.id == 0 }
+    pub fn is_null(&self) -> bool {
+        self.id == 0
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -200,7 +202,8 @@ impl Depth {
     }
 
     pub fn extend(&mut self, responses: &[VisualResponse]) {
-        self.visuals.extend(responses.iter().map(|response| Visual::new(*response)));
+        self.visuals
+            .extend(responses.iter().map(|response| Visual::new(*response)));
     }
 }
 
@@ -212,10 +215,7 @@ pub struct KeycodeRange {
 
 impl KeycodeRange {
     pub fn new(min: u8, max: u8) -> KeycodeRange {
-        KeycodeRange {
-            min,
-            max,
-        }
+        KeycodeRange { min, max }
     }
 }
 
@@ -241,9 +241,7 @@ pub struct Roots {
 
 impl Roots {
     pub fn new() -> Roots {
-        Roots {
-            roots: Vec::new(),
-        }
+        Roots { roots: Vec::new() }
     }
 
     pub fn first(&self) -> Result<&Screen, Error> {
@@ -255,7 +253,7 @@ impl Roots {
             for depth in &screen.depths {
                 match depth.visuals.iter().find(|visual| visual.id == id) {
                     Some(visual) => return Ok(visual.clone()),
-                    None => {},
+                    None => {}
                 }
             }
         }
@@ -322,18 +320,34 @@ impl Display {
 
     /// get the window from its id
     pub fn window_from_id(&self, id: u32) -> Result<Window, Error> {
-        Window::from_id(self.stream.clone(), self.replies.clone(), self.sequence.clone(), self.roots.clone(), id)
+        Window::from_id(
+            self.stream.clone(),
+            self.replies.clone(),
+            self.sequence.clone(),
+            self.roots.clone(),
+            id,
+        )
     }
 
     /// get the default root window of a display
     pub fn default_root_window(&self) -> Result<Window, Error> {
         let screen = self.roots.first()?;
 
-        Ok(Window::new(self.stream.clone(), self.replies.clone(), self.sequence.clone(), self.roots.visual_from_id(screen.response.root_visual)?, screen.response.root_depth, screen.response.root))
+        Ok(Window::new(
+            self.stream.clone(),
+            self.replies.clone(),
+            self.sequence.clone(),
+            self.roots.visual_from_id(screen.response.root_visual)?,
+            screen.response.root_depth,
+            screen.response.root,
+        ))
     }
 
     /// query an extension and if its active get its major opcode
-    pub fn query_extension(&mut self, extension: Extension) -> Result<QueryExtensionResponse, Error> {
+    pub fn query_extension(
+        &mut self,
+        extension: Extension,
+    ) -> Result<QueryExtensionResponse, Error> {
         self.sequence.append(ReplyKind::QueryExtension)?;
 
         let request = QueryExtension {
@@ -346,7 +360,14 @@ impl Display {
 
         let extension = extension.to_string();
 
-        self.stream.send(&[request::encode(&request).to_vec(), extension.as_bytes().to_vec(), vec![0u8; request::pad(extension.as_bytes().len())]].concat())?;
+        self.stream.send(
+            &[
+                request::encode(&request).to_vec(),
+                extension.as_bytes().to_vec(),
+                vec![0u8; request::pad(extension.as_bytes().len())],
+            ]
+            .concat(),
+        )?;
 
         match self.replies.wait()? {
             Reply::QueryExtension(response) => Ok(response),
@@ -360,7 +381,12 @@ impl Display {
     pub fn query_xinerama(&mut self) -> Result<Xinerama, Error> {
         let extension = self.query_extension(Extension::Xinerama)?;
 
-        Ok(Xinerama::new(self.stream.clone(), self.replies.clone(), self.sequence.clone(), extension.major_opcode))
+        Ok(Xinerama::new(
+            self.stream.clone(),
+            self.replies.clone(),
+            self.sequence.clone(),
+            extension.major_opcode,
+        ))
     }
 
     /// this request returns the current focused window
@@ -391,7 +417,14 @@ impl Display {
             pad1: [0u8; 2],
         };
 
-        self.stream.send(&[request::encode(&request).to_vec(), name.as_bytes().to_vec(), vec![0u8; request::pad(name.as_bytes().len())]].concat())?;
+        self.stream.send(
+            &[
+                request::encode(&request).to_vec(),
+                name.as_bytes().to_vec(),
+                vec![0u8; request::pad(name.as_bytes().len())],
+            ]
+            .concat(),
+        )?;
 
         match self.replies.wait()? {
             Reply::InternAtom(response) => match response.atom {
@@ -439,7 +472,10 @@ impl Display {
         })?;
 
         match self.replies.wait()? {
-            Reply::GetKeyboardMapping { keysyms, keysyms_per_keycode } => Ok((keysyms, keysyms_per_keycode)),
+            Reply::GetKeyboardMapping {
+                keysyms,
+                keysyms_per_keycode,
+            } => Ok((keysyms, keysyms_per_keycode)),
             _ => unreachable!(),
         }
     }
@@ -455,7 +491,8 @@ impl Display {
     pub fn keysym_from_character(&mut self, character: char) -> Result<Keysym, Error> {
         let (keysyms, _) = self.get_keyboard_mapping()?;
 
-        keysyms.iter()
+        keysyms
+            .iter()
             .find(|keysym| keysym.character().map(|c| c == character).unwrap_or(false))
             .map(|keysym| *keysym)
             .ok_or(Error::InvalidKeysym)
@@ -465,10 +502,13 @@ impl Display {
     pub fn keycode_from_keysym(&mut self, keysym: Keysym) -> Result<u8, Error> {
         let (keysyms, keysyms_per_keycode) = self.get_keyboard_mapping()?;
 
-        keysyms.iter()
+        keysyms
+            .iter()
             .enumerate()
             .find(|(_, x)| **x == keysym)
-            .map(|(index, _)| ((index / keysyms_per_keycode as usize) + self.setup.min_keycode as usize) as u8)
+            .map(|(index, _)| {
+                ((index / keysyms_per_keycode as usize) + self.setup.min_keycode as usize) as u8
+            })
             .ok_or(Error::InvalidKeysym)
     }
 
@@ -499,9 +539,12 @@ impl Display {
 
         let _vendor = self.stream.recv_str(self.setup.vendor_len as usize)?;
 
-        let bytes = self.stream.recv(std::mem::size_of::<PixmapFormat>() * self.setup.pixmap_formats_len as usize)?;
+        let bytes = self
+            .stream
+            .recv(std::mem::size_of::<PixmapFormat>() * self.setup.pixmap_formats_len as usize)?;
 
-        let _formats: &[PixmapFormat] = request::decode_slice(&bytes, self.setup.pixmap_formats_len as usize);
+        let _formats: &[PixmapFormat] =
+            request::decode_slice(&bytes, self.setup.pixmap_formats_len as usize);
 
         for _ in 0..self.setup.roots_len {
             let mut screen = Screen::new(self.stream.recv_decode()?);
@@ -509,7 +552,9 @@ impl Display {
             for _ in 0..screen.response.allowed_depths_len {
                 let mut depth = Depth::new(self.stream.recv_decode()?);
 
-                let bytes = self.stream.recv(std::mem::size_of::<VisualResponse>() * depth.length as usize)?;
+                let bytes = self
+                    .stream
+                    .recv(std::mem::size_of::<VisualResponse>() * depth.length as usize)?;
 
                 depth.extend(request::decode_slice(&bytes, depth.length as usize));
 
@@ -541,17 +586,30 @@ impl Display {
     fn setup<'a>(&mut self) -> Result<(), Error> {
         let entry = auth::entry()?;
 
-        let request = SetupRequest::new(self.endian(), X_PROTOCOL, X_PROTOCOL_REVISION, entry.name.len() as u16, entry.data.len() as u16);
+        let request = SetupRequest::new(
+            self.endian(),
+            X_PROTOCOL,
+            X_PROTOCOL_REVISION,
+            entry.name.len() as u16,
+            entry.data.len() as u16,
+        );
 
         self.stream.send(request::encode(&request))?;
 
-        self.stream.send_arr(&[entry.name.clone(), vec![0u8; request::pad(entry.name.len())], entry.data.clone(), vec![0u8; request::pad(entry.data.len())]])?;
+        self.stream.send_arr(&[
+            entry.name.clone(),
+            vec![0u8; request::pad(entry.name.len())],
+            entry.data.clone(),
+            vec![0u8; request::pad(entry.data.len())],
+        ])?;
 
         let response: SetupResponse = self.stream.recv_decode()?;
 
         match response.status {
             1 => self.read_setup(),
-            0 => Err(Error::SetupFailed { reason: self.stream.recv_str(response.padding as usize)? }),
+            0 => Err(Error::SetupFailed {
+                reason: self.stream.recv_str(response.padding as usize)?,
+            }),
             2 => Err(Error::Authenthicate),
             _ => Err(Error::InvalidStatus),
         }
@@ -567,7 +625,13 @@ pub struct EventListener {
 }
 
 impl EventListener {
-    pub fn new(stream: Stream, events: Queue<Event>, replies: Queue<Reply>, sequence: SequenceManager, roots: Roots) -> EventListener {
+    pub fn new(
+        stream: Stream,
+        events: Queue<Event>,
+        replies: Queue<Reply>,
+        sequence: SequenceManager,
+        roots: Roots,
+    ) -> EventListener {
         EventListener {
             stream,
             events,
@@ -585,43 +649,43 @@ impl EventListener {
                 let response: InternAtomResponse = self.stream.recv_decode()?;
 
                 self.replies.push(Reply::InternAtom(response))?;
-            },
+            }
             ReplyKind::GetWindowAttributes => {
                 let response: GetWindowAttributesResponse = self.stream.recv_decode()?;
 
                 self.replies.push(Reply::GetWindowAttributes(response))?;
-            },
+            }
             ReplyKind::GetGeometry => {
                 let response: GetGeometryResponse = self.stream.recv_decode()?;
 
                 self.replies.push(Reply::GetGeometry(response))?;
-            },
+            }
             ReplyKind::GrabPointer => {
                 let response: GrabPointerResponse = self.stream.recv_decode()?;
 
                 self.replies.push(Reply::GrabPointer(response))?;
-            },
+            }
             ReplyKind::QueryPointer => {
                 let response: QueryPointerResponse = self.stream.recv_decode()?;
 
                 self.replies.push(Reply::QueryPointer(response))?;
-            },
+            }
             ReplyKind::QueryExtension => {
                 let response: QueryExtensionResponse = self.stream.recv_decode()?;
 
                 self.replies.push(Reply::QueryExtension(response))?;
-            },
+            }
             ReplyKind::GetSelectionOwner => {
                 let response: GetSelectionOwnerResponse = self.stream.recv_decode()?;
 
                 self.replies.push(Reply::GetSelectionOwner(response))?;
-            },
+            }
             #[cfg(feature = "xinerama")]
             ReplyKind::XineramaIsActive => {
                 let response: XineramaIsActiveResponse = self.stream.recv_decode()?;
 
                 self.replies.push(Reply::XineramaIsActive(response))?;
-            },
+            }
             #[cfg(feature = "xinerama")]
             ReplyKind::XineramaQueryScreens => {
                 let response: XineramaQueryScreensResponse = self.stream.recv_decode()?;
@@ -633,12 +697,12 @@ impl EventListener {
                 }
 
                 self.replies.push(Reply::XineramaQueryScreens { screens })?;
-            },
+            }
             ReplyKind::GetInputFocus => {
                 let response: GetInputFocusResponse = self.stream.recv_decode()?;
 
                 self.replies.push(Reply::GetInputFocus(response))?;
-            },
+            }
             ReplyKind::GetProperty => {
                 let response: GetPropertyResponse = self.stream.recv_decode()?;
 
@@ -647,8 +711,9 @@ impl EventListener {
                     value: self.stream.recv(response.value_len as usize)?,
                 })?;
 
-                self.stream.recv(request::pad(response.value_len as usize))?;
-            },
+                self.stream
+                    .recv(request::pad(response.value_len as usize))?;
+            }
             ReplyKind::GetKeyboardMapping => {
                 let response: KeyboardMappingResponse = self.stream.recv_decode()?;
 
@@ -657,10 +722,13 @@ impl EventListener {
                 let keysyms = request::decode_slice::<u32>(&bytes, response.length as usize);
 
                 self.replies.push(Reply::GetKeyboardMapping {
-                    keysyms: keysyms.iter().map(|value| Keysym::new(*value)).collect::<Vec<Keysym>>(),
+                    keysyms: keysyms
+                        .iter()
+                        .map(|value| Keysym::new(*value))
+                        .collect::<Vec<Keysym>>(),
                     keysyms_per_keycode: event.detail,
                 })?;
-            },
+            }
         }
 
         Ok(())
@@ -681,12 +749,12 @@ impl EventListener {
                     bad_value: error.bad_value,
                     sequence: generic.sequence,
                 })
-            },
+            }
             Response::REPLY => {
                 self.handle_reply(generic)?;
 
                 Ok(())
-            },
+            }
             Response::KEY_PRESS | Response::KEY_RELEASE => {
                 let key_event: KeyEvent = self.stream.recv_decode()?;
 
@@ -696,7 +764,12 @@ impl EventListener {
                         Response::KEY_RELEASE => EventKind::Release,
                         _ => unreachable!(),
                     },
-                    coordinates: Coordinates::new(key_event.event_x, key_event.event_y, key_event.root_x, key_event.root_y),
+                    coordinates: Coordinates::new(
+                        key_event.event_x,
+                        key_event.event_y,
+                        key_event.root_x,
+                        key_event.root_y,
+                    ),
                     window: key_event.event,
                     root: key_event.root,
                     subwindow: key_event.child,
@@ -704,7 +777,7 @@ impl EventListener {
                     keycode: generic.detail,
                     send_event: key_event.same_screen == 0,
                 })
-            },
+            }
             Response::BUTTON_PRESS | Response::BUTTON_RELEASE => {
                 let button_event: ButtonEvent = self.stream.recv_decode()?;
 
@@ -714,7 +787,12 @@ impl EventListener {
                         Response::BUTTON_RELEASE => EventKind::Release,
                         _ => unreachable!(),
                     },
-                    coordinates: Coordinates::new(button_event.event_x, button_event.event_y, button_event.root_x, button_event.root_y),
+                    coordinates: Coordinates::new(
+                        button_event.event_x,
+                        button_event.event_y,
+                        button_event.root_x,
+                        button_event.root_y,
+                    ),
                     window: button_event.event,
                     root: button_event.root,
                     subwindow: button_event.child,
@@ -722,19 +800,24 @@ impl EventListener {
                     button: Button::from(generic.detail),
                     send_event: button_event.same_screen == 0,
                 })
-            },
+            }
             Response::MOTION_NOTIFY => {
                 let motion_notify: MotionNotify = self.stream.recv_decode()?;
 
                 self.events.push(Event::MotionNotify {
-                    coordinates: Coordinates::new(motion_notify.event_x, motion_notify.event_y, motion_notify.root_x, motion_notify.root_y),
+                    coordinates: Coordinates::new(
+                        motion_notify.event_x,
+                        motion_notify.event_y,
+                        motion_notify.root_x,
+                        motion_notify.root_y,
+                    ),
                     window: motion_notify.event,
                     root: motion_notify.root,
                     subwindow: motion_notify.child,
                     state: motion_notify.state,
                     send_event: motion_notify.same_screen == 0,
                 })
-            },
+            }
             Response::ENTER_NOTIFY => {
                 let event: EnterNotify = self.stream.recv_decode()?;
 
@@ -742,13 +825,18 @@ impl EventListener {
                     root: event.root,
                     window: event.event,
                     child: event.child,
-                    coordinates: Coordinates::new(event.event_x, event.event_y, event.root_x, event.root_y),
+                    coordinates: Coordinates::new(
+                        event.event_x,
+                        event.event_y,
+                        event.root_x,
+                        event.root_y,
+                    ),
                     state: event.state,
                     mode: EnterMode::from(event.mode),
                     focus: (event.sf & 0x01) != 0,
                     same_screen: (event.sf & 0x02) != 0,
                 })
-            },
+            }
             Response::FOCUS_IN => {
                 let event: FocusIn = self.stream.recv_decode()?;
 
@@ -757,7 +845,7 @@ impl EventListener {
                     mode: FocusMode::from(event.mode),
                     window: event.event,
                 })
-            },
+            }
             Response::FOCUS_OUT => {
                 let event: FocusOut = self.stream.recv_decode()?;
 
@@ -766,7 +854,7 @@ impl EventListener {
                     mode: FocusMode::from(event.mode),
                     window: event.event,
                 })
-            },
+            }
             Response::CREATE_NOTIFY => {
                 let event: CreateNotify = self.stream.recv_decode()?;
 
@@ -778,7 +866,7 @@ impl EventListener {
                     width: event.height,
                     height: event.height,
                 })
-            },
+            }
             Response::DESTROY_NOTIFY => {
                 let event: DestroyNotify = self.stream.recv_decode()?;
 
@@ -786,7 +874,7 @@ impl EventListener {
                     event: event.event,
                     window: event.window,
                 })
-            },
+            }
             Response::UNMAP_NOTIFY => {
                 let event: UnmapNotify = self.stream.recv_decode()?;
 
@@ -795,7 +883,7 @@ impl EventListener {
                     window: event.window,
                     configure: event.from_configure == 0,
                 })
-            },
+            }
             Response::MAP_NOTIFY => {
                 let event: MapNotify = self.stream.recv_decode()?;
 
@@ -804,7 +892,7 @@ impl EventListener {
                     window: event.window,
                     override_redirect: event.override_redirect == 0,
                 })
-            },
+            }
             Response::MAP_REQUEST => {
                 let event: MapReq = self.stream.recv_decode()?;
 
@@ -812,7 +900,7 @@ impl EventListener {
                     parent: event.parent,
                     window: event.window,
                 })
-            },
+            }
             Response::REPARENT_NOTIFY => {
                 let event: ReparentNotify = self.stream.recv_decode()?;
 
@@ -824,7 +912,7 @@ impl EventListener {
                     y: event.y,
                     override_redirect: event.override_redirect == 0,
                 })
-            },
+            }
             Response::CONFIGURE_NOTIFY => {
                 let event: ConfigNotify = self.stream.recv_decode()?;
 
@@ -839,7 +927,7 @@ impl EventListener {
                     border_width: event.border_width,
                     override_redirect: event.override_redirect == 0,
                 })
-            },
+            }
             Response::CONFIGURE_REQUEST => {
                 let event: ConfigReq = self.stream.recv_decode()?;
 
@@ -854,7 +942,7 @@ impl EventListener {
                             0x8 => values.push(ConfigureValue::Height(event.height)),
                             0x10 => values.push(ConfigureValue::Border(event.border_width)),
                             0x20 => values.push(ConfigureValue::Sibling(event.sibling)),
-                            _ => {},
+                            _ => {}
                         }
                     }
                 }
@@ -863,7 +951,7 @@ impl EventListener {
                     window: event.window,
                     values,
                 })
-            },
+            }
             Response::GRAVITY_NOTIFY => {
                 let event: GravityNotify = self.stream.recv_decode()?;
 
@@ -871,9 +959,9 @@ impl EventListener {
                     event: event.event,
                     window: event.window,
                     x: event.x,
-                    y: event.y
+                    y: event.y,
                 })
-            },
+            }
             Response::CIRCULATE_NOTIFY => {
                 let event: CircNotify = self.stream.recv_decode()?;
 
@@ -882,7 +970,7 @@ impl EventListener {
                     window: event.window,
                     place: Place::from(event.place),
                 })
-            },
+            }
             Response::CIRCULATE_REQUEST => {
                 let event: CircReq = self.stream.recv_decode()?;
 
@@ -891,7 +979,7 @@ impl EventListener {
                     window: event.window,
                     place: Place::from(event.place),
                 })
-            },
+            }
             Response::SELECTION_CLEAR => {
                 let event: SelectionClear = self.stream.recv_decode()?;
 
@@ -900,7 +988,7 @@ impl EventListener {
                     owner: event.owner,
                     selection: Atom::new(event.selection),
                 })
-            },
+            }
             Response::SELECTION_REQUEST => {
                 let event: SelectionReq = self.stream.recv_decode()?;
 
@@ -911,7 +999,7 @@ impl EventListener {
                     target: Atom::new(event.target),
                     property: Atom::new(event.property),
                 })
-            },
+            }
             Response::SELECTION_NOTIFY => {
                 let event: SelectionNotify = self.stream.recv_decode()?;
 
@@ -924,7 +1012,7 @@ impl EventListener {
                 })?;
 
                 Ok(())
-            },
+            }
             Response::CLIENT_MESSAGE => {
                 let event: CircReq = self.stream.recv_decode()?;
 
@@ -933,7 +1021,7 @@ impl EventListener {
                     window: event.window,
                     place: Place::from(event.place),
                 })
-            },
+            }
             Response::MAPPING_NOTIFY => {
                 let event: MappingNotify = self.stream.recv_decode()?;
 
@@ -942,7 +1030,7 @@ impl EventListener {
                     keycode: event.keycode,
                     count: event.count,
                 })
-            },
+            }
             _ => Ok(()),
         }
     }
@@ -959,17 +1047,31 @@ impl EventListener {
 fn open_tcp<'a>(host: SocketAddr) -> Result<Display, Error> {
     let tcp_stream = TcpStream::connect(host).map_err(|_| Error::Stream)?;
 
-    tcp_stream.set_nonblocking(false).map_err(|_| Error::Stream)?;
+    tcp_stream
+        .set_nonblocking(false)
+        .map_err(|_| Error::Stream)?;
 
-    Display::connect(Stream::new(Arc::new(Mutex::new(tcp_stream.try_clone().map_err(|_| Error::Stream)?)), Arc::new(Mutex::new(tcp_stream))))
+    Display::connect(Stream::new(
+        Arc::new(Mutex::new(
+            tcp_stream.try_clone().map_err(|_| Error::Stream)?,
+        )),
+        Arc::new(Mutex::new(tcp_stream)),
+    ))
 }
 
 fn open_unix<'a>(path: String) -> Result<Display, Error> {
     let unix_stream = UnixStream::connect(path).map_err(|_| Error::Stream)?;
 
-    unix_stream.set_nonblocking(false).map_err(|_| Error::Stream)?;
+    unix_stream
+        .set_nonblocking(false)
+        .map_err(|_| Error::Stream)?;
 
-    Display::connect(Stream::new(Arc::new(Mutex::new(unix_stream.try_clone().map_err(|_| Error::Stream)?)), Arc::new(Mutex::new(unix_stream))))
+    Display::connect(Stream::new(
+        Arc::new(Mutex::new(
+            unix_stream.try_clone().map_err(|_| Error::Stream)?,
+        )),
+        Arc::new(Mutex::new(unix_stream)),
+    ))
 }
 
 /// open a display with its $DISPLAY environment variable or a string
@@ -977,11 +1079,15 @@ pub fn open(display: Option<&str>) -> Result<Display, Error> {
     let info = parse::parse(display)?;
 
     match (info.protocol, info.host.is_empty()) {
-        (Protocol::TcpSocket, true) => open_tcp(SocketAddr::from(([127, 0, 0, 1], X_TCP_PORT + info.display))),
+        (Protocol::TcpSocket, true) => open_tcp(SocketAddr::from((
+            [127, 0, 0, 1],
+            X_TCP_PORT + info.display,
+        ))),
         (Protocol::UnixSocket, true) => open_unix(format!("/tmp/.X11-unix/X{}", info.display)),
-        (Protocol::TcpSocket, false) => open_tcp(SocketAddr::from((IpAddr::from_str(&info.host).map_err(|_| Error::InvalidDisplay)?, X_TCP_PORT + info.display))),
+        (Protocol::TcpSocket, false) => open_tcp(SocketAddr::from((
+            IpAddr::from_str(&info.host).map_err(|_| Error::InvalidDisplay)?,
+            X_TCP_PORT + info.display,
+        ))),
         (Protocol::UnixSocket, false) => open_unix(info.host),
     }
 }
-
-

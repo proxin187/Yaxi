@@ -1,8 +1,6 @@
 use crate::display::error::Error;
 
-
 // page 86 @ https://www.x.org/docs/XProtocol/proto.pdf
-
 
 #[non_exhaustive]
 pub struct CharacterSet;
@@ -41,9 +39,7 @@ pub struct Keysym {
 
 impl Keysym {
     pub fn new(value: u32) -> Keysym {
-        Keysym {
-            value,
-        }
+        Keysym { value }
     }
 
     /// get the character representation of a keysym
@@ -51,10 +47,8 @@ impl Keysym {
         match ((self.value & 0xff00) >> 8) as u8 {
             CharacterSet::LATIN1 => {
                 char::from_u32((self.value & 0xff) + 0x20 - 32).ok_or(Error::InvalidKeysym)
-            },
+            }
             _ => Err(Error::InvalidKeysym),
         }
     }
 }
-
-

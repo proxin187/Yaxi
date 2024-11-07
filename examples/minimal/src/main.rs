@@ -1,7 +1,6 @@
-use yaxi::window::{WindowArguments, ValuesBuilder, WindowKind};
-use yaxi::proto::{Event, WindowClass, EventMask};
 use yaxi::display;
-
+use yaxi::proto::{Event, EventMask, WindowClass};
+use yaxi::window::{ValuesBuilder, WindowArguments, WindowKind};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut display = display::open(None)?;
@@ -27,17 +26,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let event = display.next_event()?;
 
     match event {
-        Event::KeyEvent { kind, coordinates, window, root, subwindow, state, keycode, send_event } => {
+        Event::KeyEvent {
+            kind,
+            coordinates,
+            window,
+            root,
+            subwindow,
+            state,
+            keycode,
+            send_event,
+        } => {
             let window_copy = display.window_from_id(window)?;
 
             println!("window from id: {}, keycode: {}", window_copy.id(), keycode);
-        },
-        _ => {},
+        }
+        _ => {}
     }
 
     window.destroy(WindowKind::Window)?;
 
     Ok(())
 }
-
-

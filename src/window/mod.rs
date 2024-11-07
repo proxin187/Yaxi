@@ -1,12 +1,11 @@
-use crate::display::request::{self, *};
 use crate::display::error::Error;
-use crate::display::{Atom, Visual, Roots, Stream, Streamable};
+use crate::display::request::{self, *};
 use crate::display::xid;
+use crate::display::{Atom, Roots, Stream, Streamable, Visual};
 use crate::proto::*;
 
 use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
-
 
 /// a builder for a list of values known as `LISTofVALUE` in proto.pdf
 pub struct ValuesBuilder<T: ValueMask> {
@@ -15,8 +14,10 @@ pub struct ValuesBuilder<T: ValueMask> {
     mask: u32,
 }
 
-impl<T> ValuesBuilder<T> where T: ValueMask {
-
+impl<T> ValuesBuilder<T>
+where
+    T: ValueMask,
+{
     /// create a new values builder with specified values
     pub fn new(values: Vec<T>) -> ValuesBuilder<T> {
         ValuesBuilder {
@@ -26,10 +27,13 @@ impl<T> ValuesBuilder<T> where T: ValueMask {
         }
     }
 
-    pub(crate) fn len(&self) -> u16 { self.values.len() as u16 }
+    pub(crate) fn len(&self) -> u16 {
+        self.values.len() as u16
+    }
 
     pub(crate) fn build(&mut self) -> Vec<u8> {
-        self.values.sort_by(|a, b| a.mask().partial_cmp(&b.mask()).unwrap());
+        self.values
+            .sort_by(|a, b| a.mask().partial_cmp(&b.mask()).unwrap());
 
         for value in &self.values {
             self.mask |= value.mask();
@@ -78,18 +82,19 @@ impl ValueMask for ConfigureValue {
     fn encode(&self) -> Vec<u8> {
         match self {
             ConfigureValue::X(value)
-                | ConfigureValue::Y(value)
-                | ConfigureValue::Width(value)
-                | ConfigureValue::Height(value)
-                | ConfigureValue::Border(value) => request::encode(&(*value as u32)).to_vec(),
+            | ConfigureValue::Y(value)
+            | ConfigureValue::Width(value)
+            | ConfigureValue::Height(value)
+            | ConfigureValue::Border(value) => request::encode(&(*value as u32)).to_vec(),
 
             ConfigureValue::Sibling(window) => request::encode(&window).to_vec(),
 
-            ConfigureValue::StackMode(stack_mode) => request::encode(&(*stack_mode as u32)).to_vec(),
+            ConfigureValue::StackMode(stack_mode) => {
+                request::encode(&(*stack_mode as u32)).to_vec()
+            }
         }
     }
 }
-
 
 #[derive(Clone)]
 pub enum WindowValue {
@@ -112,7 +117,8 @@ pub enum WindowValue {
 
 impl WindowValue {
     fn mask(&self, masks: &[EventMask]) -> u32 {
-        masks.iter()
+        masks
+            .iter()
             .map(|event_mask| *event_mask as u32)
             .fold(0, |acc, x| acc | x)
     }
@@ -143,21 +149,24 @@ impl ValueMask for WindowValue {
     fn encode(&self) -> Vec<u8> {
         match self {
             WindowValue::BgPixmap(value)
-                | WindowValue::BgPixel(value)
-                | WindowValue::BorderPixmap(value)
-                | WindowValue::BorderPixel(value)
-                | WindowValue::BackingPlane(value)
-                | WindowValue::BackingPixel(value)
-                | WindowValue::Colormap(value) => request::encode(&(*value as u32)).to_vec(),
+            | WindowValue::BgPixel(value)
+            | WindowValue::BorderPixmap(value)
+            | WindowValue::BorderPixel(value)
+            | WindowValue::BackingPlane(value)
+            | WindowValue::BackingPixel(value)
+            | WindowValue::Colormap(value) => request::encode(&(*value as u32)).to_vec(),
 
-            WindowValue::BitGravity(gravity)
-                | WindowValue::WinGravity(gravity) => request::encode(&(*gravity as u32)).to_vec(),
+            WindowValue::BitGravity(gravity) | WindowValue::WinGravity(gravity) => {
+                request::encode(&(*gravity as u32)).to_vec()
+            }
 
-            WindowValue::OverrideRedirect(value)
-                | WindowValue::SaveUnder(value) => request::encode(&(*value as u32)).to_vec(),
+            WindowValue::OverrideRedirect(value) | WindowValue::SaveUnder(value) => {
+                request::encode(&(*value as u32)).to_vec()
+            }
 
-            WindowValue::EventMask(masks)
-                | WindowValue::DoNotPropogateMask(masks)=> request::encode(&self.mask(masks)).to_vec(),
+            WindowValue::EventMask(masks) | WindowValue::DoNotPropogateMask(masks) => {
+                request::encode(&self.mask(masks)).to_vec()
+            }
 
             WindowValue::Cursor(cursor) => request::encode(&(*cursor as u32)).to_vec(),
 
@@ -226,7 +235,14 @@ pub struct Window {
 }
 
 impl Window {
-    pub fn new(stream: Stream, replies: Queue<Reply>, sequence: SequenceManager, visual: Visual, depth: u8, id: u32) -> Window {
+    pub fn new(
+        stream: Stream,
+        replies: Queue<Reply>,
+        sequence: SequenceManager,
+        visual: Visual,
+        depth: u8,
+        id: u32,
+    ) -> Window {
         Window {
             stream,
             replies,
@@ -256,16 +272,14 @@ impl Window {
         })?;
 
         match replies.wait()? {
-            Reply::GetWindowAttributes(response) => {
-                Ok(Window {
-                    stream,
-                    replies,
-                    sequence,
-                    visual: roots.visual_from_id(response.visual)?,
-                    depth: screen.response.root_depth,
-                    id,
-                })
-            },
+            Reply::GetWindowAttributes(response) => Ok(Window {
+                stream,
+                replies,
+                sequence,
+                visual: roots.visual_from_id(response.visual)?,
+                depth: screen.response.root_depth,
+                id,
+            }),
             _ => unreachable!(),
         }
     }
@@ -279,7 +293,8 @@ impl Window {
 
         data.resize(data.len().max(4), 0);
 
-        let result = data.windows(4)
+        let result = data
+            .windows(4)
             .map(|chunk| Atom::new(u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]])))
             .any(|value| atoms.contains(&value));
 
@@ -287,7 +302,12 @@ impl Window {
     }
 
     /// send an event to the window
-    pub fn send_event(&mut self, event: Event, event_mask: Vec<EventMask>, propogate: bool) -> Result<(), Error> {
+    pub fn send_event(
+        &mut self,
+        event: Event,
+        event_mask: Vec<EventMask>,
+        propogate: bool,
+    ) -> Result<(), Error> {
         self.sequence.skip();
 
         let request = SendEvent {
@@ -306,7 +326,14 @@ impl Window {
             sequence: 0,
         };
 
-        self.stream.send(&[request::encode(&request).to_vec(), request::encode(&generic_event).to_vec(), data.event].concat())?;
+        self.stream.send(
+            &[
+                request::encode(&request).to_vec(),
+                request::encode(&generic_event).to_vec(),
+                data.event,
+            ]
+            .concat(),
+        )?;
 
         self.replies.poll_error()
     }
@@ -366,7 +393,12 @@ impl Window {
     // TODO: un-hardcode current-time
 
     /// sends a selection request to the owner
-    pub fn convert_selection(&mut self, selection: Atom, target: Atom, property: Atom) -> Result<(), Error> {
+    pub fn convert_selection(
+        &mut self,
+        selection: Atom,
+        target: Atom,
+        property: Atom,
+    ) -> Result<(), Error> {
         self.sequence.skip();
 
         self.stream.send_encode(ConvertSelection {
@@ -397,13 +429,19 @@ impl Window {
     }
 
     /// window id
-    pub fn id(&self) -> u32 { self.id }
+    pub fn id(&self) -> u32 {
+        self.id
+    }
 
     /// window depth
-    pub fn depth(&self) -> u8 { self.depth }
+    pub fn depth(&self) -> u8 {
+        self.depth
+    }
 
     /// visual assigned to the window
-    pub fn visual(&self) -> Visual { self.visual.clone() }
+    pub fn visual(&self) -> Visual {
+        self.visual.clone()
+    }
 
     /// create a child window with provided window arguments
     pub fn create_window(&mut self, mut window: WindowArguments) -> Result<Window, Error> {
@@ -428,11 +466,19 @@ impl Window {
             value_mask: window.values.mask,
         };
 
-        self.stream.send(&[window_values_request, request::encode(&request).to_vec()].concat())?;
+        self.stream
+            .send(&[window_values_request, request::encode(&request).to_vec()].concat())?;
 
         self.replies.poll_error()?;
 
-        Ok(Window::new(self.stream.clone(), self.replies.clone(), self.sequence.clone(), window.visual, window.depth, wid))
+        Ok(Window::new(
+            self.stream.clone(),
+            self.replies.clone(),
+            self.sequence.clone(),
+            window.visual,
+            window.depth,
+            wid,
+        ))
     }
 
     /// kill the window
@@ -465,7 +511,10 @@ impl Window {
     }
 
     /// change the attributes of a window
-    pub fn change_attributes(&mut self, mut values: ValuesBuilder<WindowValue>) -> Result<(), Error> {
+    pub fn change_attributes(
+        &mut self,
+        mut values: ValuesBuilder<WindowValue>,
+    ) -> Result<(), Error> {
         self.sequence.skip();
 
         let request = values.build();
@@ -515,12 +564,18 @@ impl Window {
 
     /// move a window, this is a fancy wrapper for configure
     pub fn mov(&mut self, x: u16, y: u16) -> Result<(), Error> {
-        self.configure(ValuesBuilder::new(vec![ConfigureValue::X(x), ConfigureValue::Y(y)]))
+        self.configure(ValuesBuilder::new(vec![
+            ConfigureValue::X(x),
+            ConfigureValue::Y(y),
+        ]))
     }
 
     /// resize a window, this is a fancy wrapper for configure
     pub fn resize(&mut self, width: u16, height: u16) -> Result<(), Error> {
-        self.configure(ValuesBuilder::new(vec![ConfigureValue::Width(width), ConfigureValue::Height(height)]))
+        self.configure(ValuesBuilder::new(vec![
+            ConfigureValue::Width(width),
+            ConfigureValue::Height(height),
+        ]))
     }
 
     /// move and resize a window, this is a fancy wrapper for configure
@@ -532,17 +587,23 @@ impl Window {
 
     /// choose the events you want to recieve
     pub fn select_input(&mut self, events: &[EventMask]) -> Result<(), Error> {
-        self.change_attributes(ValuesBuilder::new(vec![WindowValue::EventMask(events.to_vec())]))
+        self.change_attributes(ValuesBuilder::new(vec![WindowValue::EventMask(
+            events.to_vec(),
+        )]))
     }
 
     /// raise the window to the top of the stack
     pub fn raise(&mut self) -> Result<(), Error> {
-        self.configure(ValuesBuilder::new(vec![ConfigureValue::StackMode(StackMode::Above)]))
+        self.configure(ValuesBuilder::new(vec![ConfigureValue::StackMode(
+            StackMode::Above,
+        )]))
     }
 
     /// lower the window to the bottom of the stack
     pub fn lower(&mut self) -> Result<(), Error> {
-        self.configure(ValuesBuilder::new(vec![ConfigureValue::StackMode(StackMode::Below)]))
+        self.configure(ValuesBuilder::new(vec![ConfigureValue::StackMode(
+            StackMode::Below,
+        )]))
     }
 
     /// become the child of a parent window
@@ -564,7 +625,10 @@ impl Window {
 
     /// destroy the current window object
     pub fn destroy(mut self, kind: WindowKind) -> Result<(), Error> {
-        self.generic_window(kind.encode(Opcode::DESTROY_SUBWINDOWS, Opcode::DESTROY_WINDOW), 2)
+        self.generic_window(
+            kind.encode(Opcode::DESTROY_SUBWINDOWS, Opcode::DESTROY_WINDOW),
+            2,
+        )
     }
 
     /// map the window onto the screen
@@ -574,7 +638,10 @@ impl Window {
 
     /// unmap the window
     pub fn unmap(&mut self, kind: WindowKind) -> Result<(), Error> {
-        self.generic_window(kind.encode(Opcode::UNMAP_SUBWINDOWS, Opcode::UNMAP_WINDOW), 2)
+        self.generic_window(
+            kind.encode(Opcode::UNMAP_SUBWINDOWS, Opcode::UNMAP_WINDOW),
+            2,
+        )
     }
 
     /// change a property of a window
@@ -584,7 +651,7 @@ impl Window {
         type_: Atom,
         format: PropFormat,
         mode: PropMode,
-        data: &[u8]
+        data: &[u8],
     ) -> Result<(), Error> {
         self.sequence.skip();
 
@@ -600,7 +667,14 @@ impl Window {
             data_len: format.encode(data.len()),
         };
 
-        self.stream.send(&[request::encode(&request), data, &vec![0u8; request::pad(data.len())]].concat())?;
+        self.stream.send(
+            &[
+                request::encode(&request),
+                data,
+                &vec![0u8; request::pad(data.len())],
+            ]
+            .concat(),
+        )?;
 
         self.replies.poll_error()
     }
@@ -616,13 +690,19 @@ impl Window {
             wid: self.id(),
         };
 
-        self.stream.send(&[request::encode(&request), request::encode(&property.id())].concat())?;
+        self.stream
+            .send(&[request::encode(&request), request::encode(&property.id())].concat())?;
 
         self.replies.poll_error()
     }
 
     /// get the value of a property from a window
-    pub fn get_property(&mut self, property: Atom, type_: Atom, delete: bool) -> Result<(Vec<u8>, Atom), Error> {
+    pub fn get_property(
+        &mut self,
+        property: Atom,
+        type_: Atom,
+        delete: bool,
+    ) -> Result<(Vec<u8>, Atom), Error> {
         self.sequence.append(ReplyKind::GetProperty)?;
 
         self.stream.send_encode(GetProperty {
@@ -676,7 +756,9 @@ impl Window {
             owner_events: owner_events.then(|| 1).unwrap_or(0),
             length: 4,
             grab_window: self.id(),
-            modifiers: modifiers.iter().fold(0, |acc, modifier| acc | *modifier as u16),
+            modifiers: modifiers
+                .iter()
+                .fold(0, |acc, modifier| acc | *modifier as u16),
             key: keycode,
             pointer_mode: pointer_mode as u8,
             keyboard_mode: keyboard_mode as u8,
@@ -713,7 +795,9 @@ impl Window {
             cursor: cursor as u32,
             button: button as u8,
             pad0: 0,
-            modifiers: modifiers.iter().fold(0, |acc, modifier| acc | *modifier as u16),
+            modifiers: modifiers
+                .iter()
+                .fold(0, |acc, modifier| acc | *modifier as u16),
         })?;
 
         self.replies.poll_error()
@@ -729,7 +813,9 @@ impl Window {
             button: button as u8,
             length: 3,
             grab_window: self.id(),
-            modifiers: modifiers.iter().fold(0, |acc, modifier| acc | *modifier as u16),
+            modifiers: modifiers
+                .iter()
+                .fold(0, |acc, modifier| acc | *modifier as u16),
             pad0: [0u8; 2],
         })?;
 
@@ -769,5 +855,3 @@ impl Window {
         }
     }
 }
-
-

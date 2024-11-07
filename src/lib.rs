@@ -21,5 +21,3 @@ pub mod extension;
 
 #[cfg(feature = "clipboard")]
 pub mod clipboard;
-
-

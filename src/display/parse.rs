@@ -1,11 +1,10 @@
 use crate::display::error::*;
 
+use std::env;
 use std::iter::Peekable;
 use std::str::Chars;
-use std::env;
 
 // TODO: currently cant find the specification for DISPLAY so this might not be 100% accurate
-
 
 /// represents which protocol the x11 connection should use
 
@@ -65,9 +64,7 @@ pub struct Iter<'a> {
 
 impl<'a> Iter<'a> {
     pub fn new(chars: Peekable<Chars<'a>>) -> Iter {
-        Iter {
-            chars,
-        }
+        Iter { chars }
     }
 
     pub fn take_while<F: Fn(&char) -> bool>(&mut self, f: F) -> Result<Vec<char>, Error> {
@@ -80,14 +77,20 @@ impl<'a> Iter<'a> {
         Ok(buf)
     }
 
-    pub fn next_option(&mut self) -> Option<char> { self.chars.next() }
+    pub fn next_option(&mut self) -> Option<char> {
+        self.chars.next()
+    }
 
     pub fn next(&mut self) -> Result<char, Error> {
         self.chars.next().ok_or(Error::InvalidDisplay)
     }
 
     pub fn expect(&mut self, expect: char) -> Result<(), Error> {
-        self.next().and_then(|c| (c != expect).then(|| Err(Error::InvalidDisplay)).unwrap_or(Ok(())))
+        self.next().and_then(|c| {
+            (c != expect)
+                .then(|| Err(Error::InvalidDisplay))
+                .unwrap_or(Ok(()))
+        })
     }
 }
 
@@ -100,7 +103,7 @@ pub struct Parser<'a> {
 
 impl<'a> Parser<'a> {
     pub fn new(display: &'a str) -> Parser<'a> {
-    Parser {
+        Parser {
             iter: Iter::new(display.chars().peekable()),
             display: DisplayInfo::default(),
             state: State::Host,
@@ -111,7 +114,11 @@ impl<'a> Parser<'a> {
         while self.state != State::Finished {
             match self.state {
                 State::Host => {
-                    self.display.host = self.iter.take_while(|c| *c != ':' && *c != '/')?.iter().collect();
+                    self.display.host = self
+                        .iter
+                        .take_while(|c| *c != ':' && *c != '/')?
+                        .iter()
+                        .collect();
 
                     match (self.display.host.as_str(), self.iter.next()?) {
                         ("unix", _) => self.state = State::Unix,
@@ -119,33 +126,46 @@ impl<'a> Parser<'a> {
                         (_, '/') => self.state = State::Protocol,
                         _ => unreachable!(),
                     }
-                },
+                }
                 State::Protocol => {
-                    self.display.protocol = Protocol::from(self.iter.take_while(|c| *c != ':')?.iter().collect())?;
+                    self.display.protocol =
+                        Protocol::from(self.iter.take_while(|c| *c != ':')?.iter().collect())?;
 
                     self.iter.next()?;
 
                     self.state = State::Display;
-                },
+                }
                 State::Display => {
-                    self.display.display = self.iter.take_while(|c| *c != '.')?.iter().collect::<String>().parse::<u16>().map_err(|_| Error::InvalidDisplay)?;
+                    self.display.display = self
+                        .iter
+                        .take_while(|c| *c != '.')?
+                        .iter()
+                        .collect::<String>()
+                        .parse::<u16>()
+                        .map_err(|_| Error::InvalidDisplay)?;
 
                     match self.iter.next_option() {
                         Some('.') => self.state = State::Screen,
                         _ => self.state = State::Finished,
                     }
-                },
+                }
                 State::Screen => {
-                    self.display.screen = self.iter.take_while(|c| *c != '.')?.iter().collect::<String>().parse::<u16>().map_err(|_| Error::InvalidDisplay)?;
+                    self.display.screen = self
+                        .iter
+                        .take_while(|c| *c != '.')?
+                        .iter()
+                        .collect::<String>()
+                        .parse::<u16>()
+                        .map_err(|_| Error::InvalidDisplay)?;
 
                     self.state = State::Finished;
-                },
+                }
                 State::Unix => {
                     self.display.host = self.iter.take_while(|_| true)?.iter().collect();
 
                     self.state = State::Finished;
-                },
-                _ => {},
+                }
+                _ => {}
             }
         }
 
@@ -168,7 +188,10 @@ mod tests {
     fn test_simple() -> Result<(), Error> {
         let display = parse::parse(Some(":69"))?;
 
-        assert_eq!(display, DisplayInfo::new(String::new(), Protocol::UnixSocket, 69, 0));
+        assert_eq!(
+            display,
+            DisplayInfo::new(String::new(), Protocol::UnixSocket, 69, 0)
+        );
 
         Ok(())
     }
@@ -177,7 +200,10 @@ mod tests {
     fn test_unix() -> Result<(), Error> {
         let display = parse::parse(Some("unix:/some/file/path"))?;
 
-        assert_eq!(display, DisplayInfo::new(String::from("/some/file/path"), Protocol::UnixSocket, 0, 0));
+        assert_eq!(
+            display,
+            DisplayInfo::new(String::from("/some/file/path"), Protocol::UnixSocket, 0, 0)
+        );
 
         Ok(())
     }
@@ -186,10 +212,11 @@ mod tests {
     fn test_tcp() -> Result<(), Error> {
         let display = parse::parse(Some("13.37.13.37/tcp:69.420"))?;
 
-        assert_eq!(display, DisplayInfo::new(String::from("13.37.13.37"), Protocol::TcpSocket, 69, 420));
+        assert_eq!(
+            display,
+            DisplayInfo::new(String::from("13.37.13.37"), Protocol::TcpSocket, 69, 420)
+        );
 
         Ok(())
     }
 }
-
-

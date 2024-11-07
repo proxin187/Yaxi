@@ -1,7 +1,6 @@
-use std::slice;
 use std::mem;
 use std::ptr;
-
+use std::slice;
 
 // https://xcb.freedesktop.org/manual/xproto_8h_source.html
 
@@ -17,7 +16,13 @@ pub struct SetupRequest {
 }
 
 impl SetupRequest {
-    pub fn new(endian: u8, major_version: u16, minor_version: u16, name_len: u16, data_len: u16) -> SetupRequest {
+    pub fn new(
+        endian: u8,
+        major_version: u16,
+        minor_version: u16,
+        name_len: u16,
+        data_len: u16,
+    ) -> SetupRequest {
         SetupRequest {
             endian,
             pad0: endian,
@@ -789,9 +794,7 @@ pub struct SendEvent {
 }
 
 pub fn encode<T>(ptr: &T) -> &[u8] {
-    unsafe {
-        slice::from_raw_parts((ptr as *const T) as *const u8, mem::size_of::<T>())
-    }
+    unsafe { slice::from_raw_parts((ptr as *const T) as *const u8, mem::size_of::<T>()) }
 }
 
 pub fn decode<'a, T>(bytes: &'a [u8]) -> T {
@@ -813,5 +816,3 @@ pub fn decode_slice<'a, T>(bytes: &'a [u8], length: usize) -> &'a [T] {
 pub fn pad(len: usize) -> usize {
     (4 - (len % 4)) % 4
 }
-
-

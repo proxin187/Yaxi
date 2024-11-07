@@ -7,7 +7,7 @@ static XID: Mutex<Xid> = Mutex::new(Xid::new());
 macro_rules! lock {
     ($mutex:expr) => {
         $mutex.lock().map_err(|_| Error::FailedToLock)
-    }
+    };
 }
 
 pub struct Xid {
@@ -48,5 +48,3 @@ pub fn setup(base: u32, mask: u32) -> Result<(), Error> {
 pub fn next() -> Result<u32, Error> {
     lock!(XID)?.next()
 }
-
-

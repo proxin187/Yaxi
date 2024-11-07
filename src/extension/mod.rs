@@ -23,5 +23,3 @@ impl Extension {
         self.to_string().as_bytes().len()
     }
 }
-
-

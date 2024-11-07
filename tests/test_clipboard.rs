@@ -2,7 +2,6 @@ use std::time::SystemTime;
 
 use yaxi::clipboard::Clipboard;
 
-
 #[cfg(test)]
 #[cfg(feature = "clipboard")]
 mod tests {
@@ -55,5 +54,3 @@ mod tests {
         test_clipboard_text_consistency();
     }
 }
-
-

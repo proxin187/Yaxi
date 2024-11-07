@@ -1,16 +1,16 @@
-use crate::display::request::{self, *};
 use crate::display::error::Error;
+use crate::display::request::{self, *};
 use crate::display::Atom;
-use crate::window::ConfigureValue;
 use crate::keyboard::Keysym;
+use crate::window::ConfigureValue;
 
-use std::sync::atomic::{Ordering, AtomicU16};
+use std::sync::atomic::{AtomicU16, Ordering};
 use std::sync::{Arc, Mutex};
 
 macro_rules! lock {
     ($mutex:expr) => {
         $mutex.lock().map_err(|_| Error::FailedToLock)
-    }
+    };
 }
 
 #[non_exhaustive]
@@ -138,7 +138,10 @@ pub struct Queue<T: std::fmt::Debug + Clone> {
     errors: Arc<Mutex<Vec<Error>>>,
 }
 
-impl<T> Clone for Queue<T> where T: std::fmt::Debug + Clone {
+impl<T> Clone for Queue<T>
+where
+    T: std::fmt::Debug + Clone,
+{
     fn clone(&self) -> Queue<T> {
         Queue {
             queue: self.queue.clone(),
@@ -147,7 +150,10 @@ impl<T> Clone for Queue<T> where T: std::fmt::Debug + Clone {
     }
 }
 
-impl<T> Queue<T> where T: std::fmt::Debug + Clone {
+impl<T> Queue<T>
+where
+    T: std::fmt::Debug + Clone,
+{
     pub fn new(errors: Arc<Mutex<Vec<Error>>>) -> Queue<T> {
         Queue {
             queue: Arc::new(Mutex::new(Vec::new())),
@@ -243,10 +249,7 @@ pub struct Sequence {
 
 impl Sequence {
     pub fn new(id: u16, kind: ReplyKind) -> Sequence {
-        Sequence {
-            id,
-            kind,
-        }
+        Sequence { id, kind }
     }
 }
 
@@ -529,7 +532,6 @@ pub enum FocusDetail {
     Nop = 7,
 }
 
-
 impl From<u8> for FocusDetail {
     fn from(value: u8) -> FocusDetail {
         match value {
@@ -742,34 +744,47 @@ pub struct SendEventData {
 
 impl SendEventData {
     pub fn new(detail: u8, event: Vec<u8>) -> SendEventData {
-        SendEventData {
-            detail,
-            event,
-        }
+        SendEventData { detail, event }
     }
 }
 
 impl Event {
     pub fn encode(&self) -> SendEventData {
         match self {
-            Event::SelectionNotify { time, requestor, selection, target, property } => {
-                SendEventData::new(0, request::encode(&SelectionNotify {
+            Event::SelectionNotify {
+                time,
+                requestor,
+                selection,
+                target,
+                property,
+            } => SendEventData::new(
+                0,
+                request::encode(&SelectionNotify {
                     time: *time,
                     requestor: *requestor,
                     selection: selection.id(),
                     target: target.id(),
                     property: property.id(),
                     pad0: [0u8; 8],
-                }).to_vec())
-            },
-            Event::ClientMessage { format, window, type_, data } => {
+                })
+                .to_vec(),
+            ),
+            Event::ClientMessage {
+                format,
+                window,
+                type_,
+                data,
+            } => {
                 let event = ClientMessage {
                     window: *window,
                     type_: type_.id(),
                 };
 
-                SendEventData::new(*format, [request::encode(&event).to_vec(), data.encode()].concat())
-            },
+                SendEventData::new(
+                    *format,
+                    [request::encode(&event).to_vec(), data.encode()].concat(),
+                )
+            }
             _ => unimplemented!("not all events are implemented for send event yet"),
         }
     }
@@ -807,5 +822,3 @@ impl Event {
         }
     }
 }
-
-

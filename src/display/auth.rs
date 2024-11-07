@@ -1,10 +1,9 @@
-use super::{Stream, Error};
+use super::{Error, Stream};
 
-use std::fs::File;
-use std::sync::{Arc, Mutex};
 use std::env;
+use std::fs::File;
 use std::mem;
-
+use std::sync::{Arc, Mutex};
 
 #[derive(Debug)]
 pub struct Entry {
@@ -27,14 +26,18 @@ impl XAuth {
             .open(env::var("XAUTHORITY")?)?;
 
         Ok(XAuth {
-            file: Stream::new(Arc::new(Mutex::new(file.try_clone()?)), Arc::new(Mutex::new(file))),
+            file: Stream::new(
+                Arc::new(Mutex::new(file.try_clone()?)),
+                Arc::new(Mutex::new(file)),
+            ),
         })
     }
 
     fn value(&mut self) -> Result<Vec<u8>, Error> {
         let size = self.file.recv(mem::size_of::<u16>())?;
 
-        self.file.recv(((size[0] as u16) << 8 | size[1] as u16) as usize)
+        self.file
+            .recv(((size[0] as u16) << 8 | size[1] as u16) as usize)
     }
 
     pub fn entry(&mut self) -> Result<Entry, Error> {
@@ -55,5 +58,3 @@ pub fn entry() -> Result<Entry, Error> {
 
     auth.entry()
 }
-
-
