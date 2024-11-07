@@ -350,6 +350,16 @@ pub struct EnterNotify {
 
 #[repr(packed, C)]
 #[derive(Debug)]
+pub struct PropertyNotify {
+    pub window: u32,
+    pub atom: u32,
+    pub time: u32,
+    pub state: u8,
+    pub pad0: [u8; 15],
+}
+
+#[repr(packed, C)]
+#[derive(Debug)]
 pub struct CreateWindow {
     pub opcode: u8,
     pub depth: u8,

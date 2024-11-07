@@ -980,6 +980,16 @@ impl EventListener {
                     place: Place::from(event.place),
                 })
             }
+            Response::PROPERTY_NOTIFY => {
+                let event: PropertyNotify = self.stream.recv_decode()?;
+
+                self.events.push(Event::PropertyNotify {
+                    window: event.window,
+                    atom: Atom::new(event.atom),
+                    time: event.time,
+                    state: PropertyState::from(event.state),
+                })
+            },
             Response::SELECTION_CLEAR => {
                 let event: SelectionClear = self.stream.recv_decode()?;
 

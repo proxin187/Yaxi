@@ -39,6 +39,7 @@ impl Response {
     pub const GRAVITY_NOTIFY: u8 = 24;
     pub const CIRCULATE_NOTIFY: u8 = 26;
     pub const CIRCULATE_REQUEST: u8 = 27;
+    pub const PROPERTY_NOTIFY: u8 = 28;
     pub const SELECTION_CLEAR: u8 = 29;
     pub const SELECTION_REQUEST: u8 = 30;
     pub const SELECTION_NOTIFY: u8 = 31;
@@ -574,6 +575,22 @@ pub enum EventKind {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum PropertyState {
+    NewValue,
+    Deleted,
+}
+
+impl From<u8> for PropertyState {
+    fn from(value: u8) -> PropertyState {
+        match value {
+            0 => PropertyState::NewValue,
+            1 => PropertyState::Deleted,
+            _ => unreachable!(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum ClientMessageData {
     Byte([u8; 20]),
     Short([u16; 10]),
@@ -705,6 +722,12 @@ pub enum Event {
         window: u32,
         place: Place,
     },
+    PropertyNotify {
+        window: u32,
+        atom: Atom,
+        time: u32,
+        state: PropertyState,
+    },
     SelectionClear {
         time: u32,
         owner: u32,
@@ -814,6 +837,7 @@ impl Event {
             Event::GravityNotify { .. } => Response::GRAVITY_NOTIFY,
             Event::CirculateNotify { .. } => Response::CIRCULATE_NOTIFY,
             Event::CirculateRequest { .. } => Response::CIRCULATE_REQUEST,
+            Event::PropertyNotify { .. } => Response::PROPERTY_NOTIFY,
             Event::SelectionClear { .. } => Response::SELECTION_CLEAR,
             Event::SelectionRequest { .. } => Response::SELECTION_REQUEST,
             Event::SelectionNotify { .. } => Response::SELECTION_NOTIFY,
