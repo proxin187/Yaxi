@@ -120,6 +120,8 @@ impl<'a> Parser<'a> {
                         .iter()
                         .collect();
 
+                    // TODO: double colon (:) support
+
                     match (self.display.host.as_str(), self.iter.next()?) {
                         ("unix", _) => self.state = State::Unix,
                         (_, ':') => self.state = State::Display,

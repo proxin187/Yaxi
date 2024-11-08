@@ -80,7 +80,6 @@
 //! - `extras` - enables some convencience functions that arent a part of the official protocol
 //!
 
-/// display is the foundation of an x11 connection
 pub mod display;
 
 /// proto contains protocol specific code such as opcodes, replies and so on.

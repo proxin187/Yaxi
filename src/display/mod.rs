@@ -1,3 +1,7 @@
+//! Basic Display functionality for x11
+//!
+//!
+
 pub(crate) mod auth;
 pub(crate) mod error;
 pub(crate) mod parse;
@@ -1086,7 +1090,40 @@ fn open_unix<'a>(path: String) -> Result<Display, Error> {
     ))
 }
 
-/// open a display with its $DISPLAY environment variable or a string
+/// Open a connection to the x11 server that controls a display.
+///
+/// This function is essentialy the yaxi equivalent to [XOpenDisplay](https://tronche.com/gui/x/xlib/display/opening.html).
+///
+/// On POSIX-conformant systems, the display name or DISPLAY environment variable can be a string in the format:
+/// `hostname:number.screen_number`
+///
+/// - `hostname` - Specifies the name of the host machine on which the display is physically attached. You follow the hostname with either a single colon (:) or a double colon (::).
+/// - `number` - Specifies the number of the display server on that host machine. You may optionally follow this display number with a period (.). A single CPU can have more than one display. Multiple displays are usually numbered starting with zero.
+/// - `screen_number` - Specifies the screen to be used on that server. Multiple screens can be controlled by a single X server. The screen_number sets an internal variable that can be accessed by using the DefaultScreen() macro or the XDefaultScreen() function if you are using languages other than C (see "Display Macros").
+///
+/// # Example: connect using $DISPLAY
+///
+/// ```rust
+/// use yaxi::display;
+///
+/// fn main() -> Result<(), Box<dyn std::error::Error>> {
+///     let mut _display = display::open(None)?;
+///
+///     Ok(())
+/// }
+/// ```
+///
+/// # Example: connect using custom display string
+///
+/// ```rust
+/// use yaxi::display;
+///
+/// fn main() -> Result<(), Box<dyn std::error::Error>> {
+///     let mut _display = display::open(Some("13.37.13.37/tcp:69.420"))?;
+///
+///     Ok(())
+/// }
+/// ```
 pub fn open(display: Option<&str>) -> Result<Display, Error> {
     let info = parse::parse(display)?;
 
