@@ -566,15 +566,15 @@ impl Display {
 
         let stream = self.stream.clone();
         let events = self.events.clone();
-        let replies = self.replies.clone();
+        let mut replies = self.replies.clone();
         let sequence = self.sequence.clone();
         let roots = self.roots.clone();
 
         thread::spawn(move || {
-            let mut listener = EventListener::new(stream, events, replies, sequence, roots);
+            let mut listener = EventListener::new(stream, events, replies.clone(), sequence, roots);
 
             if let Err(err) = listener.listen() {
-                println!("[ERROR] listener failed: {}", err);
+                let _ = replies.push_error(err);
             }
         });
 
@@ -1047,7 +1047,7 @@ impl EventListener {
         }
     }
 
-    pub fn listen(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn listen(&mut self) -> Result<(), Error> {
         loop {
             let event: GenericEvent = self.stream.recv_decode()?;
 
