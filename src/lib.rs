@@ -13,7 +13,7 @@
 //! adding `yaxi` to your dependencies in `Cargo.toml`:
 //! ```toml
 //! [dependencies]
-//! yaxi = "0.1.45"
+//! yaxi = "0.1.46"
 //! ```
 //!
 //! Or running the following Cargo command in your project directory:
@@ -78,6 +78,7 @@
 //! - `xinerama` - this feature allows the user to interface with [Xinerama](https://en.wikipedia.org/wiki/Xinerama), an extension to the x11 protocol enabling to use two or more physical displays as one shared display
 //! - `clipboard` - extensible builtin clipboard functionality
 //! - `extras` - enables some convencience functions that arent a part of the official protocol
+//! - `ewmh` - enable convencience functions for working with [EWMH](https://specifications.freedesktop.org/wm-spec/1.3/)
 //!
 
 pub mod display;
@@ -98,3 +99,8 @@ pub mod extension;
 
 #[cfg(feature = "clipboard")]
 pub mod clipboard;
+
+/// ewmh defines interactions between window managers, applications, and the utilities that form part of a desktop environment
+
+#[cfg(feature = "ewmh")]
+pub mod ewmh;

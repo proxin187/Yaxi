@@ -1,0 +1,11 @@
+[package]
+name = "ewmh"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "active_window"
+path = "src/active_window.rs"
+
+[dependencies]
+yaxi = { path = "../..", features = ["ewmh"] }

@@ -1,6 +1,6 @@
 [package]
 name = "yaxi"
-version = "0.1.45"
+version = "0.1.46"
 edition = "2021"
 
 description = "A rust implementation of the x11 protocol"
@@ -19,13 +19,14 @@ path = "src/lib.rs"
 xinerama = []
 clipboard = []
 extras = []
+ewmh = []
 
 [dependencies]
 
 # https://github.com/rust-lang/cargo/issues/2911#issuecomment-749580481
 
 [dev-dependencies]
-yaxi = { path = ".", features = ["clipboard", "xinerama", "extras"] }
+yaxi = { path = ".", features = ["clipboard", "xinerama", "extras", "ewmh"] }
 
 [workspace]
 members = ["examples/*"]

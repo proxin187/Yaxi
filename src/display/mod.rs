@@ -13,6 +13,9 @@ use crate::extension::Extension;
 #[cfg(feature = "xinerama")]
 use crate::extension::xinerama::Xinerama;
 
+#[cfg(feature = "ewmh")]
+use crate::ewmh::EwmhAtoms;
+
 use crate::keyboard::*;
 use crate::proto::*;
 use crate::window::*;
@@ -330,6 +333,9 @@ impl Display {
             self.sequence.clone(),
             self.roots.clone(),
             id,
+
+            #[cfg(feature = "ewmh")]
+            self.get_ewmh_atoms()?,
         )
     }
 
@@ -344,6 +350,9 @@ impl Display {
             self.roots.visual_from_id(screen.response.root_visual)?,
             screen.response.root_depth,
             screen.response.root,
+
+            #[cfg(feature = "ewmh")]
+            self.get_ewmh_atoms()?,
         ))
     }
 

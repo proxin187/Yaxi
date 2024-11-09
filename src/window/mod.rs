@@ -4,6 +4,10 @@ use crate::display::xid;
 use crate::display::{Atom, Roots, Stream, Visual};
 use crate::proto::*;
 
+#[cfg(feature = "ewmh")]
+use crate::ewmh::EwmhAtoms;
+
+
 /// a builder for a list of values known as `LISTofVALUE` in proto.pdf
 pub struct ValuesBuilder<T: ValueMask> {
     values: Vec<T>,
@@ -229,6 +233,9 @@ pub struct Window {
     visual: Visual,
     depth: u8,
     id: u32,
+
+    #[cfg(feature = "ewmh")]
+    ewmh_atoms: EwmhAtoms,
 }
 
 impl Window {
@@ -239,6 +246,9 @@ impl Window {
         visual: Visual,
         depth: u8,
         id: u32,
+
+        #[cfg(feature = "ewmh")]
+        ewmh_atoms: EwmhAtoms,
     ) -> Window {
         Window {
             stream,
@@ -247,6 +257,9 @@ impl Window {
             visual,
             depth,
             id,
+
+            #[cfg(feature = "ewmh")]
+            ewmh_atoms,
         }
     }
 
@@ -256,6 +269,9 @@ impl Window {
         sequence: SequenceManager,
         roots: Roots,
         id: u32,
+
+        #[cfg(feature = "ewmh")]
+        ewmh_atoms: EwmhAtoms,
     ) -> Result<Window, Error> {
         sequence.append(ReplyKind::GetWindowAttributes)?;
 
@@ -276,6 +292,9 @@ impl Window {
                 visual: roots.visual_from_id(response.visual)?,
                 depth: screen.response.root_depth,
                 id,
+
+                #[cfg(feature = "ewmh")]
+                ewmh_atoms,
             }),
             _ => unreachable!(),
         }
@@ -286,16 +305,34 @@ impl Window {
 
     #[cfg(feature = "extras")]
     pub fn property_contains(&self, property: Atom, atoms: &[Atom]) -> Result<bool, Error> {
-        let (mut data, _) = self.get_property(property, Atom::ATOM, false)?;
+        let property = self.get_property(property, Atom::ATOM, false)?.map(|(mut data, _)| {
+            data.resize(data.len().max(4), 0);
 
-        data.resize(data.len().max(4), 0);
+            data.windows(4)
+                .map(|chunk| Atom::new(u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]])))
+                .any(|value| atoms.contains(&value))
+        });
 
-        let result = data
-            .windows(4)
-            .map(|chunk| Atom::new(u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]])))
-            .any(|value| atoms.contains(&value));
+        Ok(property.unwrap_or(false))
+    }
 
-        Ok(result)
+    /// get the current active window (wrapper for _NET_ACTIVE_WINDOW)
+
+    #[cfg(feature = "ewmh")]
+    pub fn ewmh_get_active_window(&self) -> Result<Option<u32>, Error> {
+        let wid = self.get_property(self.ewmh_atoms.net_active_window, Atom::WINDOW, false)?.map(|(mut data, _)| {
+            data.resize(4, 0);
+
+            // TODO: looks like get property reads 14 on _NET_ACTIVE_WINDOW
+            // there is defenetly something wrong as `xprop -root _NET_ACTIVE_WINDOW` gives 0x280000e
+            // most likely an error inside get_property
+
+            println!("data: {:?}", data);
+
+            u32::from_le_bytes([data[0], data[1], data[2], data[3]])
+        });
+
+        Ok(wid)
     }
 
     /// send an event to the window
@@ -475,6 +512,9 @@ impl Window {
             window.visual,
             window.depth,
             wid,
+
+            #[cfg(feature = "ewmh")]
+            self.ewmh_atoms.clone(),
         ))
     }
 
@@ -696,7 +736,7 @@ impl Window {
         property: Atom,
         type_: Atom,
         delete: bool,
-    ) -> Result<(Vec<u8>, Atom), Error> {
+    ) -> Result<Option<(Vec<u8>, Atom)>, Error> {
         self.sequence.append(ReplyKind::GetProperty)?;
 
         self.stream.send_encode(GetProperty {
@@ -711,7 +751,7 @@ impl Window {
         })?;
 
         match self.replies.wait()? {
-            Reply::GetProperty { type_, value } => Ok((value, type_)),
+            Reply::GetProperty { type_, value } => Ok(type_.is_null().then(|| None).unwrap_or(Some((value, type_)))),
             _ => unreachable!(),
         }
     }
