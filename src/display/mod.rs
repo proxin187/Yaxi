@@ -1100,7 +1100,7 @@ fn open_unix<'a>(path: String) -> Result<Display, Error> {
 ///
 /// # Example: connect using $DISPLAY
 ///
-/// ```rust
+/// ```no_run
 /// use yaxi::display;
 ///
 /// fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -1112,7 +1112,7 @@ fn open_unix<'a>(path: String) -> Result<Display, Error> {
 ///
 /// # Example: connect using custom display string
 ///
-/// ```rust
+/// ```no_run
 /// use yaxi::display;
 ///
 /// fn main() -> Result<(), Box<dyn std::error::Error>> {

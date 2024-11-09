@@ -17,14 +17,14 @@
 //! ```
 //!
 //! Or running the following Cargo command in your project directory:
-//! ```
+//! ```bash
 //! cargo add yaxi
 //! ```
 //!
 //! # [Example: open a window](https://github.com/proxin187/Yaxi/tree/main/examples/minimal)
 //! The following example opens a window and waits for a keyboard press before it quits:
 //!
-//! ```rust
+//! ```no_run
 //! use yaxi::window::{WindowArguments, ValuesBuilder, WindowKind};
 //! use yaxi::proto::{Event, WindowClass, EventMask};
 //! use yaxi::display;
