@@ -34,7 +34,7 @@ impl Xinerama {
     }
 
     /// query the screens and return them in a vector
-    pub fn query_screens(&mut self) -> Result<Vec<XineramaScreenInfo>, Error> {
+    pub fn query_screens(&self) -> Result<Vec<XineramaScreenInfo>, Error> {
         self.sequence.append(ReplyKind::XineramaQueryScreens)?;
 
         self.stream.send_encode(XineramaQueryScreens {
@@ -50,7 +50,7 @@ impl Xinerama {
     }
 
     /// returns true if xinerama is active
-    pub fn is_active(&mut self) -> Result<bool, Error> {
+    pub fn is_active(&self) -> Result<bool, Error> {
         self.sequence.append(ReplyKind::XineramaIsActive)?;
 
         self.stream.send_encode(XineramaIsActive {

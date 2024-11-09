@@ -85,8 +85,8 @@ impl Drop for Clipboard {
 impl Clipboard {
     /// create a new clipboard helper instance
     pub fn new(display: Option<&str>) -> Result<Clipboard, Error> {
-        let mut display = display::open(display)?;
-        let mut root = display.default_root_window()?;
+        let display = display::open(display)?;
+        let root = display.default_root_window()?;
 
         let target = Target {
             window: root.create_window(WindowArguments {
@@ -128,7 +128,7 @@ impl Clipboard {
     }
 
     /// set text into the clipboard
-    pub fn set_text(&mut self, text: &str) -> Result<(), Error> {
+    pub fn set_text(&self, text: &str) -> Result<(), Error> {
         self.target
             .window
             .set_selection_owner(self.atoms.clipboard)?;
@@ -140,7 +140,7 @@ impl Clipboard {
         String::from_utf8(bytes).map_err(|err| Error::Other { error: err.into() })
     }
 
-    fn get_selection(&mut self) -> Result<Vec<u8>, Error> {
+    fn get_selection(&self) -> Result<Vec<u8>, Error> {
         write!(self.data)?.reset();
 
         self.target.window.convert_selection(
@@ -157,7 +157,7 @@ impl Clipboard {
     // TODO: this deadlocks if the owner terminates during the call
 
     /// get text from the clipboard
-    pub fn get_text(&mut self) -> Result<String, Error> {
+    pub fn get_text(&self) -> Result<String, Error> {
         let owner = self.display.get_selection_owner(self.atoms.clipboard)?;
 
         match self.display.window_from_id(owner) {
@@ -237,7 +237,7 @@ impl Listener {
     pub fn handle_request(
         &mut self,
         time: u32,
-        mut owner: Window,
+        owner: Window,
         selection: Atom,
         target: Atom,
         property: Atom,

@@ -66,14 +66,14 @@ impl Stream {
         Stream { reader, writer }
     }
 
-    pub fn send(&mut self, request: &[u8]) -> Result<(), Error> {
+    pub fn send(&self, request: &[u8]) -> Result<(), Error> {
         let mut lock = lock!(self.writer)?;
 
         lock.write_all(request)
             .map_err(|err| Error::Other { error: err.into() })
     }
 
-    pub fn send_arr(&mut self, requests: &[Vec<u8>]) -> Result<(), Error> {
+    pub fn send_arr(&self, requests: &[Vec<u8>]) -> Result<(), Error> {
         let mut lock = lock!(self.writer)?;
 
         for request in requests {
@@ -84,7 +84,7 @@ impl Stream {
         Ok(())
     }
 
-    pub fn send_pad(&mut self, request: &[u8]) -> Result<(), Error> {
+    pub fn send_pad(&self, request: &[u8]) -> Result<(), Error> {
         let mut lock = lock!(self.writer)?;
 
         lock.write_all(request)
@@ -96,11 +96,11 @@ impl Stream {
         Ok(())
     }
 
-    pub fn send_encode<E>(&mut self, object: E) -> Result<(), Error> {
+    pub fn send_encode<E>(&self, object: E) -> Result<(), Error> {
         self.send(request::encode(&object))
     }
 
-    pub fn recv(&mut self, size: usize) -> Result<Vec<u8>, Error> {
+    pub fn recv(&self, size: usize) -> Result<Vec<u8>, Error> {
         let mut lock = lock!(self.reader)?;
         let mut buffer = vec![0u8; size];
 
@@ -110,7 +110,7 @@ impl Stream {
         }
     }
 
-    pub fn recv_str(&mut self, size: usize) -> Result<String, Error> {
+    pub fn recv_str(&self, size: usize) -> Result<String, Error> {
         let bytes = self.recv(size)?;
 
         self.recv(size % 4)?;
@@ -118,7 +118,7 @@ impl Stream {
         String::from_utf8(bytes).map_err(|_| Error::Utf8)
     }
 
-    pub fn recv_decode<R>(&mut self) -> Result<R, Error> {
+    pub fn recv_decode<R>(&self) -> Result<R, Error> {
         let bytes = self.recv(std::mem::size_of::<R>())?;
 
         Ok(request::decode(&bytes))
@@ -348,10 +348,7 @@ impl Display {
     }
 
     /// query an extension and if its active get its major opcode
-    pub fn query_extension(
-        &mut self,
-        extension: Extension,
-    ) -> Result<QueryExtensionResponse, Error> {
+    pub fn query_extension(&self, extension: Extension) -> Result<QueryExtensionResponse, Error> {
         self.sequence.append(ReplyKind::QueryExtension)?;
 
         let request = QueryExtension {
@@ -382,7 +379,7 @@ impl Display {
     /// query for the xinerama extension and return a structure with its methods
 
     #[cfg(feature = "xinerama")]
-    pub fn query_xinerama(&mut self) -> Result<Xinerama, Error> {
+    pub fn query_xinerama(&self) -> Result<Xinerama, Error> {
         let extension = self.query_extension(Extension::Xinerama)?;
 
         Ok(Xinerama::new(
@@ -394,7 +391,7 @@ impl Display {
     }
 
     /// this request returns the current focused window
-    pub fn get_input_focus(&mut self) -> Result<GetInputFocusResponse, Error> {
+    pub fn get_input_focus(&self) -> Result<GetInputFocusResponse, Error> {
         self.sequence.append(ReplyKind::GetInputFocus)?;
 
         self.stream.send_encode(GetInputFocus {
@@ -410,7 +407,7 @@ impl Display {
     }
 
     /// get an atom from its name
-    pub fn intern_atom<'a>(&mut self, name: &'a str, only_if_exists: bool) -> Result<Atom, Error> {
+    pub fn intern_atom<'a>(&self, name: &'a str, only_if_exists: bool) -> Result<Atom, Error> {
         self.sequence.append(ReplyKind::InternAtom)?;
 
         let request = InternAtom {
@@ -441,7 +438,7 @@ impl Display {
 
     /// get the owner of a selection, (this function returns the window id, use
     /// display::window_from_id to get the structure)
-    pub fn get_selection_owner(&mut self, selection: Atom) -> Result<u32, Error> {
+    pub fn get_selection_owner(&self, selection: Atom) -> Result<u32, Error> {
         self.sequence.append(ReplyKind::GetSelectionOwner)?;
 
         self.stream.send_encode(GetSelectionOwner {
@@ -463,7 +460,7 @@ impl Display {
     }
 
     /// get the keyboard mapping from the server
-    pub fn get_keyboard_mapping(&mut self) -> Result<(Vec<Keysym>, u8), Error> {
+    pub fn get_keyboard_mapping(&self) -> Result<(Vec<Keysym>, u8), Error> {
         self.sequence.append(ReplyKind::GetKeyboardMapping)?;
 
         self.stream.send_encode(GetKeyboardMapping {
@@ -485,14 +482,14 @@ impl Display {
     }
 
     /// get the keysym from a keycode
-    pub fn keysym_from_keycode(&mut self, keycode: u8) -> Result<Keysym, Error> {
+    pub fn keysym_from_keycode(&self, keycode: u8) -> Result<Keysym, Error> {
         let (keysyms, keysyms_per_keycode) = self.get_keyboard_mapping()?;
 
         Ok(keysyms[(keycode - self.setup.min_keycode) as usize * keysyms_per_keycode as usize])
     }
 
     /// get the keysym from a character
-    pub fn keysym_from_character(&mut self, character: char) -> Result<Keysym, Error> {
+    pub fn keysym_from_character(&self, character: char) -> Result<Keysym, Error> {
         let (keysyms, _) = self.get_keyboard_mapping()?;
 
         keysyms
@@ -503,7 +500,7 @@ impl Display {
     }
 
     /// get the keycode from a keysym
-    pub fn keycode_from_keysym(&mut self, keysym: Keysym) -> Result<u8, Error> {
+    pub fn keycode_from_keysym(&self, keysym: Keysym) -> Result<u8, Error> {
         let (keysyms, keysyms_per_keycode) = self.get_keyboard_mapping()?;
 
         keysyms
@@ -517,7 +514,7 @@ impl Display {
     }
 
     /// ungrab the pointer
-    pub fn ungrab_pointer(&mut self) -> Result<(), Error> {
+    pub fn ungrab_pointer(&self) -> Result<(), Error> {
         self.sequence.skip();
 
         // TODO: un-hardcode current time
@@ -570,7 +567,7 @@ impl Display {
 
         let stream = self.stream.clone();
         let events = self.events.clone();
-        let mut replies = self.replies.clone();
+        let replies = self.replies.clone();
         let sequence = self.sequence.clone();
         let roots = self.roots.clone();
 
@@ -993,7 +990,7 @@ impl EventListener {
                     time: event.time,
                     state: PropertyState::from(event.state),
                 })
-            },
+            }
             Response::SELECTION_CLEAR => {
                 let event: SelectionClear = self.stream.recv_decode()?;
 

@@ -178,12 +178,12 @@ where
     }
 
     #[inline]
-    pub fn push(&mut self, element: T) -> Result<(), Error> {
+    pub fn push(&self, element: T) -> Result<(), Error> {
         lock!(self.queue).map(|mut lock| lock.push(element))
     }
 
     #[inline]
-    pub fn push_error(&mut self, error: Error) -> Result<(), Error> {
+    pub fn push_error(&self, error: Error) -> Result<(), Error> {
         lock!(self.errors).map(|mut lock| lock.push(error))
     }
 
@@ -268,7 +268,7 @@ impl SequenceManager {
         }
     }
 
-    pub fn get(&mut self, id: u16) -> Result<Sequence, Error> {
+    pub fn get(&self, id: u16) -> Result<Sequence, Error> {
         let mut lock = lock!(self.sequences)?;
 
         match lock.iter().position(|sequence| sequence.id == id) {
@@ -277,11 +277,11 @@ impl SequenceManager {
         }
     }
 
-    pub fn skip(&mut self) {
+    pub fn skip(&self) {
         self.id.fetch_add(1, Ordering::Relaxed);
     }
 
-    pub fn append(&mut self, kind: ReplyKind) -> Result<(), Error> {
+    pub fn append(&self, kind: ReplyKind) -> Result<(), Error> {
         self.skip();
 
         lock!(self.sequences)?.push(Sequence::new(self.id.load(Ordering::Relaxed), kind));

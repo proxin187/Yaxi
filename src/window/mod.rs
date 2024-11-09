@@ -1,11 +1,8 @@
 use crate::display::error::Error;
 use crate::display::request::{self, *};
 use crate::display::xid;
-use crate::display::{Atom, Roots, Stream, Streamable, Visual};
+use crate::display::{Atom, Roots, Stream, Visual};
 use crate::proto::*;
-
-use std::io::{Read, Write};
-use std::sync::{Arc, Mutex};
 
 /// a builder for a list of values known as `LISTofVALUE` in proto.pdf
 pub struct ValuesBuilder<T: ValueMask> {
@@ -254,9 +251,9 @@ impl Window {
     }
 
     pub(crate) fn from_id(
-        mut stream: Stream,
+        stream: Stream,
         replies: Queue<Reply>,
-        mut sequence: SequenceManager,
+        sequence: SequenceManager,
         roots: Roots,
         id: u32,
     ) -> Result<Window, Error> {
@@ -288,7 +285,7 @@ impl Window {
     /// NOTE: using this function in combination with a property that is not the ATOM[]/32 type will result in a undefined result
 
     #[cfg(feature = "extras")]
-    pub fn property_contains(&mut self, property: Atom, atoms: &[Atom]) -> Result<bool, Error> {
+    pub fn property_contains(&self, property: Atom, atoms: &[Atom]) -> Result<bool, Error> {
         let (mut data, _) = self.get_property(property, Atom::ATOM, false)?;
 
         data.resize(data.len().max(4), 0);
@@ -303,7 +300,7 @@ impl Window {
 
     /// send an event to the window
     pub fn send_event(
-        &mut self,
+        &self,
         event: Event,
         event_mask: Vec<EventMask>,
         propogate: bool,
@@ -339,7 +336,7 @@ impl Window {
     }
 
     /// get the window attributes
-    pub fn get_window_attributes(&mut self) -> Result<GetWindowAttributesResponse, Error> {
+    pub fn get_window_attributes(&self) -> Result<GetWindowAttributesResponse, Error> {
         self.sequence.append(ReplyKind::GetWindowAttributes)?;
 
         self.stream.send_encode(GetWindowAttributes {
@@ -356,7 +353,7 @@ impl Window {
     }
 
     /// get the geometry of the window
-    pub fn get_geometry(&mut self) -> Result<GetGeometryResponse, Error> {
+    pub fn get_geometry(&self) -> Result<GetGeometryResponse, Error> {
         self.sequence.append(ReplyKind::GetGeometry)?;
 
         self.stream.send_encode(GetGeometry {
@@ -375,7 +372,7 @@ impl Window {
     // TODO: un-hardcode current-time
 
     /// set the window to the selection owner
-    pub fn set_selection_owner(&mut self, selection: Atom) -> Result<(), Error> {
+    pub fn set_selection_owner(&self, selection: Atom) -> Result<(), Error> {
         self.sequence.skip();
 
         self.stream.send_encode(SetSelectionOwner {
@@ -394,7 +391,7 @@ impl Window {
 
     /// sends a selection request to the owner
     pub fn convert_selection(
-        &mut self,
+        &self,
         selection: Atom,
         target: Atom,
         property: Atom,
@@ -415,7 +412,7 @@ impl Window {
         self.replies.poll_error()
     }
 
-    fn generic_window(&mut self, opcode: u8, length: u16) -> Result<(), Error> {
+    fn generic_window(&self, opcode: u8, length: u16) -> Result<(), Error> {
         self.sequence.skip();
 
         self.stream.send_encode(GenericWindow {
@@ -444,7 +441,7 @@ impl Window {
     }
 
     /// create a child window with provided window arguments
-    pub fn create_window(&mut self, mut window: WindowArguments) -> Result<Window, Error> {
+    pub fn create_window(&self, mut window: WindowArguments) -> Result<Window, Error> {
         self.sequence.skip();
 
         let window_values_request = window.values.build();
@@ -482,7 +479,7 @@ impl Window {
     }
 
     /// kill the window
-    pub fn kill(&mut self) -> Result<(), Error> {
+    pub fn kill(&self) -> Result<(), Error> {
         self.sequence.skip();
 
         self.stream.send_encode(KillClient {
@@ -496,7 +493,7 @@ impl Window {
     }
 
     /// sets the current input focus to the window
-    pub fn set_input_focus(&mut self, revert_to: RevertTo) -> Result<(), Error> {
+    pub fn set_input_focus(&self, revert_to: RevertTo) -> Result<(), Error> {
         self.sequence.skip();
 
         self.stream.send_encode(SetInputFocus {
@@ -511,10 +508,7 @@ impl Window {
     }
 
     /// change the attributes of a window
-    pub fn change_attributes(
-        &mut self,
-        mut values: ValuesBuilder<WindowValue>,
-    ) -> Result<(), Error> {
+    pub fn change_attributes(&self, mut values: ValuesBuilder<WindowValue>) -> Result<(), Error> {
         self.sequence.skip();
 
         let request = values.build();
@@ -533,7 +527,7 @@ impl Window {
     }
 
     /// configure the window
-    pub fn configure(&mut self, mut values: ValuesBuilder<ConfigureValue>) -> Result<(), Error> {
+    pub fn configure(&self, mut values: ValuesBuilder<ConfigureValue>) -> Result<(), Error> {
         self.sequence.skip();
 
         let request = values.build();
@@ -553,17 +547,17 @@ impl Window {
     }
 
     /// set the border of a window to a pixel
-    pub fn set_border_pixel(&mut self, pixel: u32) -> Result<(), Error> {
+    pub fn set_border_pixel(&self, pixel: u32) -> Result<(), Error> {
         self.change_attributes(ValuesBuilder::new(vec![WindowValue::BorderPixel(pixel)]))
     }
 
     /// set the border width of a window
-    pub fn set_border_width(&mut self, width: u16) -> Result<(), Error> {
+    pub fn set_border_width(&self, width: u16) -> Result<(), Error> {
         self.configure(ValuesBuilder::new(vec![ConfigureValue::Border(width)]))
     }
 
     /// move a window, this is a fancy wrapper for configure
-    pub fn mov(&mut self, x: u16, y: u16) -> Result<(), Error> {
+    pub fn mov(&self, x: u16, y: u16) -> Result<(), Error> {
         self.configure(ValuesBuilder::new(vec![
             ConfigureValue::X(x),
             ConfigureValue::Y(y),
@@ -571,7 +565,7 @@ impl Window {
     }
 
     /// resize a window, this is a fancy wrapper for configure
-    pub fn resize(&mut self, width: u16, height: u16) -> Result<(), Error> {
+    pub fn resize(&self, width: u16, height: u16) -> Result<(), Error> {
         self.configure(ValuesBuilder::new(vec![
             ConfigureValue::Width(width),
             ConfigureValue::Height(height),
@@ -579,35 +573,35 @@ impl Window {
     }
 
     /// move and resize a window, this is a fancy wrapper for configure
-    pub fn mov_resize(&mut self, x: u16, y: u16, width: u16, height: u16) -> Result<(), Error> {
+    pub fn mov_resize(&self, x: u16, y: u16, width: u16, height: u16) -> Result<(), Error> {
         self.mov(x, y)?;
 
         self.resize(width, height)
     }
 
     /// choose the events you want to recieve
-    pub fn select_input(&mut self, events: &[EventMask]) -> Result<(), Error> {
+    pub fn select_input(&self, events: &[EventMask]) -> Result<(), Error> {
         self.change_attributes(ValuesBuilder::new(vec![WindowValue::EventMask(
             events.to_vec(),
         )]))
     }
 
     /// raise the window to the top of the stack
-    pub fn raise(&mut self) -> Result<(), Error> {
+    pub fn raise(&self) -> Result<(), Error> {
         self.configure(ValuesBuilder::new(vec![ConfigureValue::StackMode(
             StackMode::Above,
         )]))
     }
 
     /// lower the window to the bottom of the stack
-    pub fn lower(&mut self) -> Result<(), Error> {
+    pub fn lower(&self) -> Result<(), Error> {
         self.configure(ValuesBuilder::new(vec![ConfigureValue::StackMode(
             StackMode::Below,
         )]))
     }
 
     /// become the child of a parent window
-    pub fn reparent(&mut self, parent: Window, x: u16, y: u16) -> Result<(), Error> {
+    pub fn reparent(&self, parent: Window, x: u16, y: u16) -> Result<(), Error> {
         self.sequence.skip();
 
         self.stream.send_encode(ReparentWindow {
@@ -624,7 +618,7 @@ impl Window {
     }
 
     /// destroy the current window object
-    pub fn destroy(mut self, kind: WindowKind) -> Result<(), Error> {
+    pub fn destroy(self, kind: WindowKind) -> Result<(), Error> {
         self.generic_window(
             kind.encode(Opcode::DESTROY_SUBWINDOWS, Opcode::DESTROY_WINDOW),
             2,
@@ -632,12 +626,12 @@ impl Window {
     }
 
     /// map the window onto the screen
-    pub fn map(&mut self, kind: WindowKind) -> Result<(), Error> {
+    pub fn map(&self, kind: WindowKind) -> Result<(), Error> {
         self.generic_window(kind.encode(Opcode::MAP_SUBWINDOWS, Opcode::MAP_WINDOW), 2)
     }
 
     /// unmap the window
-    pub fn unmap(&mut self, kind: WindowKind) -> Result<(), Error> {
+    pub fn unmap(&self, kind: WindowKind) -> Result<(), Error> {
         self.generic_window(
             kind.encode(Opcode::UNMAP_SUBWINDOWS, Opcode::UNMAP_WINDOW),
             2,
@@ -646,7 +640,7 @@ impl Window {
 
     /// change a property of a window
     pub fn change_property(
-        &mut self,
+        &self,
         property: Atom,
         type_: Atom,
         format: PropFormat,
@@ -680,7 +674,7 @@ impl Window {
     }
 
     /// delete a property from a window
-    pub fn delete_property(&mut self, property: Atom) -> Result<(), Error> {
+    pub fn delete_property(&self, property: Atom) -> Result<(), Error> {
         self.sequence.skip();
 
         let request = GenericWindow {
@@ -698,7 +692,7 @@ impl Window {
 
     /// get the value of a property from a window
     pub fn get_property(
-        &mut self,
+        &self,
         property: Atom,
         type_: Atom,
         delete: bool,
@@ -723,7 +717,7 @@ impl Window {
     }
 
     /// get info about the pointer such as position
-    pub fn query_pointer(&mut self) -> Result<QueryPointerResponse, Error> {
+    pub fn query_pointer(&self) -> Result<QueryPointerResponse, Error> {
         self.sequence.append(ReplyKind::QueryPointer)?;
 
         self.stream.send_encode(QueryPointer {
@@ -742,7 +736,7 @@ impl Window {
     /// grab a key from the window,
     /// buttons are not valid modifiers
     pub fn grab_key(
-        &mut self,
+        &self,
         modifiers: Vec<KeyMask>,
         keycode: u8,
         pointer_mode: PointerMode,
@@ -771,7 +765,7 @@ impl Window {
     /// grab a button from the window,
     /// buttons are not valid modifiers
     pub fn grab_button(
-        &mut self,
+        &self,
         button: Button,
         modifiers: Vec<KeyMask>,
         event_mask: Vec<EventMask>,
@@ -805,7 +799,7 @@ impl Window {
 
     /// ungrab a button from the window,
     /// buttons are not valid modifiers
-    pub fn ungrab_button(&mut self, button: Button, modifiers: Vec<KeyMask>) -> Result<(), Error> {
+    pub fn ungrab_button(&self, button: Button, modifiers: Vec<KeyMask>) -> Result<(), Error> {
         self.sequence.skip();
 
         self.stream.send_encode(UngrabButton {
@@ -824,7 +818,7 @@ impl Window {
 
     /// grab the pointer
     pub fn grab_pointer(
-        &mut self,
+        &self,
         event_mask: Vec<EventMask>,
         cursor: Cursor,
         pointer_mode: PointerMode,
