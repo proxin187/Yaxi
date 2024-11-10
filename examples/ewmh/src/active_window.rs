@@ -7,7 +7,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let active = root.ewmh_get_active_window()?;
 
-    println!("active: {:?}", active);
+    println!("active: {:x?}", active);
 
     Ok(())
 }

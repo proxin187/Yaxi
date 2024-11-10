@@ -718,7 +718,13 @@ impl EventListener {
 
                 self.replies.push(Reply::GetProperty {
                     type_: Atom::new(response.type_),
-                    value: self.stream.recv(response.value_len as usize)?,
+                    value: match event.detail {
+                        0 => Vec::new(),
+                        8 => self.stream.recv(response.value_len as usize)?,
+                        16 => self.stream.recv(response.value_len as usize * 2)?,
+                        32 => self.stream.recv(response.value_len as usize * 4)?,
+                        _ => unreachable!(),
+                    },
                 })?;
 
                 self.stream
