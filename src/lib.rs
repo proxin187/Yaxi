@@ -81,7 +81,7 @@
 //! - `ewmh` - enable convencience functions for working with [EWMH](https://specifications.freedesktop.org/wm-spec/1.3/)
 
 // TODO: fix features in docs
-#![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 pub mod display;
 
@@ -100,9 +100,11 @@ pub mod extension;
 /// clipboard is a user-friendly wrapper around x11 selections
 
 #[cfg(feature = "clipboard")]
+#[cfg_attr(docsrs, doc(cfg(feature = "clipboard")))]
 pub mod clipboard;
 
 /// ewmh defines interactions between window managers, applications, and the utilities that form part of a desktop environment
 
 #[cfg(feature = "ewmh")]
+#[cfg_attr(docsrs, doc(cfg(feature = "ewmh")))]
 pub mod ewmh;
