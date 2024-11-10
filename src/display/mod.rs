@@ -130,7 +130,7 @@ impl Stream {
 
 /// an atom in the x11 protocol is an integer representing a string
 /// atoms in the range 1..=68 are predefined (only 1..=20 implemented so far)
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Atom {
     id: u32,
 }
@@ -280,6 +280,9 @@ pub struct Display {
     pub(crate) roots: Roots,
     pub(crate) setup: SuccessResponse,
     pub(crate) sequence: SequenceManager,
+
+    #[cfg(feature = "ewmh")]
+    pub(crate) ewmh_atoms: EwmhAtoms,
 }
 
 impl Clone for Display {
@@ -293,6 +296,9 @@ impl Clone for Display {
             roots: self.roots.clone(),
             setup: self.setup.clone(),
             sequence: self.sequence.clone(),
+
+            #[cfg(feature = "ewmh")]
+            ewmh_atoms: self.ewmh_atoms.clone(),
         }
     }
 }
@@ -308,9 +314,15 @@ impl Display {
             roots: Roots::new(),
             setup: SuccessResponse::default(),
             sequence: SequenceManager::new(),
+
+            #[cfg(feature = "ewmh")]
+            ewmh_atoms: EwmhAtoms::default(),
         };
 
         display.setup()?;
+
+        #[cfg(feature = "ewmh")]
+        display.load_ewmh_atoms()?;
 
         Ok(display)
     }
@@ -335,7 +347,7 @@ impl Display {
             id,
 
             #[cfg(feature = "ewmh")]
-            self.get_ewmh_atoms()?,
+            self.ewmh_atoms.clone(),
         )
     }
 
@@ -352,7 +364,7 @@ impl Display {
             screen.response.root,
 
             #[cfg(feature = "ewmh")]
-            self.get_ewmh_atoms()?,
+            self.ewmh_atoms.clone(),
         ))
     }
 

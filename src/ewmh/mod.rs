@@ -2,7 +2,7 @@ use crate::display::{Display, Atom};
 use crate::display::error::Error;
 
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub(crate) struct EwmhAtoms {
     pub(crate) net_active_window: Atom,
     pub(crate) net_client_list: Atom,
@@ -22,11 +22,22 @@ pub(crate) struct EwmhAtoms {
     pub(crate) net_workarea: Atom,
     pub(crate) net_close_window: Atom,
     pub(crate) net_moveresize_window: Atom,
+    pub(crate) net_supporting_wm_check: Atom,
+    pub(crate) utf8: Atom,
+
+    pub(crate) net_wm_window_type_desktop: Atom,
+    pub(crate) net_wm_window_type_dock: Atom,
+    pub(crate) net_wm_window_type_toolbar: Atom,
+    pub(crate) net_wm_window_type_menu: Atom,
+    pub(crate) net_wm_window_type_utility: Atom,
+    pub(crate) net_wm_window_type_splash: Atom,
+    pub(crate) net_wm_window_type_dialog: Atom,
+    pub(crate) net_wm_window_type_normal: Atom,
 }
 
 impl Display {
-    pub(crate) fn get_ewmh_atoms(&self) -> Result<EwmhAtoms, Error> {
-        Ok(EwmhAtoms {
+    pub(crate) fn load_ewmh_atoms(&mut self) -> Result<(), Error> {
+        self.ewmh_atoms = EwmhAtoms {
             net_active_window: self.intern_atom("_NET_ACTIVE_WINDOW", false)?,
             net_client_list: self.intern_atom("_NET_CLIENT_LIST", false)?,
             net_client_list_stacking: self.intern_atom("_NET_CLIENT_LIST_STACKING", false)?,
@@ -45,10 +56,24 @@ impl Display {
             net_workarea: self.intern_atom("_NET_WORKAREA", false)?,
             net_close_window: self.intern_atom("_NET_CLOSE_WINDOW", false)?,
             net_moveresize_window: self.intern_atom("_NET_MOVERESIZE_WINDOW", false)?,
-        })
+            net_supporting_wm_check: self.intern_atom("_NET_SUPPORTING_WM_CHECK", false)?,
+            utf8: self.intern_atom("UTF8_STRING", false)?,
+
+            net_wm_window_type_desktop: self.intern_atom("_NET_WM_WINDOW_TYPE_DESKTOP", false)?,
+            net_wm_window_type_dock: self.intern_atom("_NET_WM_WINDOW_TYPE_DOCK", false)?,
+            net_wm_window_type_toolbar: self.intern_atom("_NET_WM_WINDOW_TYPE_TOOLBAR", false)?,
+            net_wm_window_type_menu: self.intern_atom("_NET_WM_WINDOW_TYPE_MENU", false)?,
+            net_wm_window_type_utility: self.intern_atom("_NET_WM_WINDOW_TYPE_UTILITY", false)?,
+            net_wm_window_type_splash: self.intern_atom("_NET_WM_WINDOW_TYPE_SPLASH", false)?,
+            net_wm_window_type_dialog: self.intern_atom("_NET_WM_WINDOW_TYPE_DIALOG", false)?,
+            net_wm_window_type_normal: self.intern_atom("_NET_WM_WINDOW_TYPE_NORMAL", false)?,
+        };
+
+        Ok(())
     }
 }
 
+#[derive(Debug, Clone, Copy)]
 pub enum EwmhWindowType {
     Desktop,
     Dock,
@@ -56,11 +81,13 @@ pub enum EwmhWindowType {
     Menu,
     Utility,
     Splash,
-    Popup,
-    Notification,
-    Combo,
-    Dnd,
+    Dialog,
     Normal,
+}
+
+pub struct DesktopGeometry {
+    pub width: u32,
+    pub height: u32,
 }
 
 

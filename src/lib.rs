@@ -13,7 +13,7 @@
 //! adding `yaxi` to your dependencies in `Cargo.toml`:
 //! ```toml
 //! [dependencies]
-//! yaxi = "0.1.46"
+//! yaxi = "0.1.47"
 //! ```
 //!
 //! Or running the following Cargo command in your project directory:
@@ -79,7 +79,9 @@
 //! - `clipboard` - extensible builtin clipboard functionality
 //! - `extras` - enables some convencience functions that arent a part of the official protocol
 //! - `ewmh` - enable convencience functions for working with [EWMH](https://specifications.freedesktop.org/wm-spec/1.3/)
-//!
+
+// TODO: fix features in docs
+#![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
 pub mod display;
 

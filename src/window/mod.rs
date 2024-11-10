@@ -5,7 +5,9 @@ use crate::display::{Atom, Roots, Stream, Visual};
 use crate::proto::*;
 
 #[cfg(feature = "ewmh")]
-use crate::ewmh::EwmhAtoms;
+use crate::ewmh::*;
+
+use std::collections::HashMap;
 
 
 /// a builder for a list of values known as `LISTofVALUE` in proto.pdf
@@ -320,17 +322,109 @@ impl Window {
 
     #[cfg(feature = "ewmh")]
     pub fn ewmh_get_active_window(&self) -> Result<Option<u32>, Error> {
-        let wid = self.get_property(self.ewmh_atoms.net_active_window, Atom::WINDOW, false)?.map(|(mut data, _)| {
+        self.get_u32_property(self.ewmh_atoms.net_active_window, Atom::WINDOW)
+    }
+
+    /// get the client list, this list only contains the windows managed by a ewmh compliant window
+    /// manager, _NET_CLIENT_LIST has initial mapping order, starting with the oldest window
+
+    #[cfg(feature = "ewmh")]
+    pub fn ewmh_get_client_list(&self) -> Result<Option<Vec<u32>>, Error> {
+        self.get_u32_list_property(self.ewmh_atoms.net_client_list, Atom::WINDOW)
+    }
+
+    /// get the stacked client list, this list only contains the windows managed by a ewmh compliant window
+    /// manager, _NET_CLIENT_LIST_STACKING has bottom-to-top stacking order
+
+    #[cfg(feature = "ewmh")]
+    pub fn ewmh_get_client_list_stacking(&self) -> Result<Option<Vec<u32>>, Error> {
+        self.get_u32_list_property(self.ewmh_atoms.net_client_list_stacking, Atom::WINDOW)
+    }
+
+    /// get the index of the current desktop, (wrapper for _NET_CURRENT_DESKTOP)
+
+    #[cfg(feature = "ewmh")]
+    pub fn ewmh_get_current_desktop(&self) -> Result<Option<u32>, Error> {
+        self.get_u32_property(self.ewmh_atoms.net_current_desktop, Atom::CARDINAL)
+    }
+
+    /// get the desktop geometry, width and height, (wrapper for _NET_DESKTOP_GEOMETRY)
+
+    #[cfg(feature = "ewmh")]
+    pub fn ewmh_get_desktop_geometry(&self) -> Result<Option<DesktopGeometry>, Error> {
+        let geometry = self.get_u32_list_property(self.ewmh_atoms.net_desktop_geometry, Atom::CARDINAL)?.map(|mut data| {
+            data.resize(2, 0);
+
+            DesktopGeometry {
+                width: data[0],
+                height: data[1],
+            }
+        });
+
+        Ok(geometry)
+    }
+
+    /// The Window Manager MUST set this property on the root window to be the ID of a child window created by himself, to indicate that a compliant window manager is active.
+
+    #[cfg(feature = "ewmh")]
+    pub fn ewmh_set_supporting_wm_check(&self, wid: u32) -> Result<(), Error> {
+        self.change_property(self.ewmh_atoms.net_supporting_wm_check, Atom::WINDOW, PropFormat::Format32, PropMode::Replace, &wid.to_le_bytes())
+    }
+
+    /// The Client SHOULD set this to the title of the window in UTF-8 encoding. If set, the Window Manager should use this in preference to WM_NAME (wrapper for _NET_WM_NAME)
+
+    #[cfg(feature = "ewmh")]
+    pub fn ewmh_set_wm_name(&self, name: &str) -> Result<(), Error> {
+        self.change_property(self.ewmh_atoms.net_wm_name, self.ewmh_atoms.utf8, PropFormat::Format8, PropMode::Replace, name.as_bytes())
+    }
+
+    #[cfg(feature = "ewmh")]
+    pub fn get_wm_window_type(&self) -> Result<Vec<EwmhWindowType>, Error> {
+        // TODO: using a hashmap and getting the type from there is very clean but quite slow,
+        // maybe we should consider more performant alternatives
+
+        let map = HashMap::from([
+            (self.ewmh_atoms.net_wm_window_type_desktop.id(), EwmhWindowType::Desktop),
+            (self.ewmh_atoms.net_wm_window_type_dock.id(), EwmhWindowType::Dock),
+            (self.ewmh_atoms.net_wm_window_type_toolbar.id(), EwmhWindowType::Toolbar),
+            (self.ewmh_atoms.net_wm_window_type_menu.id(), EwmhWindowType::Menu),
+            (self.ewmh_atoms.net_wm_window_type_utility.id(), EwmhWindowType::Utility),
+            (self.ewmh_atoms.net_wm_window_type_splash.id(), EwmhWindowType::Splash),
+            (self.ewmh_atoms.net_wm_window_type_dialog.id(), EwmhWindowType::Dialog),
+            (self.ewmh_atoms.net_wm_window_type_normal.id(), EwmhWindowType::Normal),
+        ]);
+
+        let type_ = self.get_u32_list_property(self.ewmh_atoms.net_wm_window_type, Atom::ATOM)?.map(|data| {
+            data.iter()
+                .filter_map(|atom| map.get(atom).copied())
+                .collect::<Vec<EwmhWindowType>>()
+        });
+
+        Ok(type_.unwrap_or(Vec::new()))
+    }
+
+    #[cfg(feature = "ewmh")]
+    fn get_u32_list_property(&self, property: Atom, type_: Atom) -> Result<Option<Vec<u32>>, Error> {
+        self.map_property(property, type_, |data, _| {
+            data.chunks(4)
+                .filter(|chunk| chunk.len() == 4)
+                .map(|chunk| u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
+                .collect::<Vec<u32>>()
+        })
+    }
+
+    #[cfg(feature = "ewmh")]
+    fn get_u32_property(&self, property: Atom, type_: Atom) -> Result<Option<u32>, Error> {
+        self.map_property(property, type_, |mut data, _| {
             data.resize(4, 0);
 
-            // TODO: looks like get property reads 14 on _NET_ACTIVE_WINDOW
-            // there is defenetly something wrong as `xprop -root _NET_ACTIVE_WINDOW` gives 0x280000e
-            // most likely an error inside get_property
-
-            println!("data: {:?}", data);
-
             u32::from_le_bytes([data[0], data[1], data[2], data[3]])
-        });
+        })
+    }
+
+    #[cfg(feature = "ewmh")]
+    fn map_property<F, R>(&self, property: Atom, type_: Atom, f: F) -> Result<Option<R>, Error> where F: Fn(Vec<u8>, Atom) -> R {
+        let wid = self.get_property(property, type_, false)?.map(|(data, type_)| f(data, type_));
 
         Ok(wid)
     }

@@ -1,6 +1,6 @@
 [package]
 name = "yaxi"
-version = "0.1.46"
+version = "0.1.47"
 edition = "2021"
 
 description = "A rust implementation of the x11 protocol"
@@ -10,6 +10,10 @@ repository = "https://github.com/proxin187/yaxi"
 keywords = ["x11", "xcb", "xlib", "xproto", "protocol"]
 categories = ["api-bindings", "os", "graphics"]
 license = "MIT OR Apache-2.0"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
 
 [lib]
 name = "yaxi"
