@@ -379,7 +379,7 @@ impl Window {
     }
 
     #[cfg(feature = "ewmh")]
-    pub fn get_wm_window_type(&self) -> Result<Vec<EwmhWindowType>, Error> {
+    pub fn ewmh_get_wm_window_type(&self) -> Result<Vec<EwmhWindowType>, Error> {
         // TODO: using a hashmap and getting the type from there is very clean but quite slow,
         // maybe we should consider more performant alternatives
 
