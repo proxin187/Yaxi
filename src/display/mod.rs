@@ -177,6 +177,21 @@ impl Atom {
     }
 }
 
+impl TryFrom<&[u8]> for Atom {
+    type Error = Error;
+
+    fn try_from(bytes: &[u8]) -> Result<Atom, Error> {
+        match bytes.len() {
+            4 => {
+                let ne_bytes = bytes.try_into().map_err(|_| Error::InvalidAtom)?;
+                let id = u32::from_ne_bytes(ne_bytes);
+                Ok(Atom::new(id))
+            }
+            _ => Err(Error::InvalidAtom),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Visual {
     pub id: u32,
@@ -428,12 +443,12 @@ impl Display {
     }
 
     /// get an atom from its name
-    pub fn intern_atom<'a>(&self, name: &'a str, only_if_exists: bool) -> Result<Atom, Error> {
+    pub fn intern_atom(&self, name: &str, only_if_exists: bool) -> Result<Atom, Error> {
         self.sequence.append(ReplyKind::InternAtom)?;
 
         let request = InternAtom {
             opcode: Opcode::INTERN_ATOM,
-            only_if_exists: only_if_exists.then(|| 1).unwrap_or(0),
+            only_if_exists: if only_if_exists { 1 } else { 0 },
             length: 2 + (name.len() as u16 + request::pad(name.len()) as u16) / 4,
             name_len: name.len() as u16,
             pad1: [0u8; 2],

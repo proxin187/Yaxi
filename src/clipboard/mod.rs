@@ -58,19 +58,170 @@ impl ClipboardData {
 
 #[derive(Clone)]
 struct Atoms {
-    clipboard: Atom,
-    utf8: Atom,
+    selections: SelectionAtoms,
+    manager: ManagerAtoms,
+    protocol: ProtocolAtoms,
+    formats: FormatAtoms,
 }
 
 #[derive(Clone)]
-struct Target {
+struct SelectionAtoms {
+    clipboard: Atom,
+    primary: Atom,
+    secondary: Atom,
+}
+
+#[derive(Clone)]
+struct ManagerAtoms {
+    manager: Atom,
+    save_targets: Atom,
+}
+
+#[derive(Clone)]
+struct ProtocolAtoms {
+    targets: Atom,
+    atom: Atom,
+    incremental: Atom,
+}
+
+#[derive(Clone)]
+struct FormatAtoms {
+    text: TextFormatAtoms,
+    rich: RichFormatAtoms,
+}
+
+#[derive(Clone)]
+struct TextFormatAtoms {
+    utf8_string: Atom,
+    utf8_mime: Atom,
+    utf8_mime_alt: Atom,
+    string: Atom,
+    text: Atom,
+    plain: Atom,
+}
+
+#[derive(Clone)]
+struct RichFormatAtoms {
+    html: Atom,
+    rtf: Atom,
+    png: Atom,
+    jpeg: Atom,
+    tiff: Atom,
+    pdf: Atom,
+    uri_list: Atom,
+}
+
+impl Atoms {
+    pub fn new(display: &Display) -> Result<Atoms, Error> {
+        Ok(Atoms {
+            selections: SelectionAtoms::new(display)?,
+            manager: ManagerAtoms::new(display)?,
+            protocol: ProtocolAtoms::new(display)?,
+            formats: FormatAtoms::new(display)?,
+        })
+    }
+}
+
+impl SelectionAtoms {
+    fn new(display: &Display) -> Result<Self, Error> {
+        Ok(Self {
+            clipboard: display.intern_atom("CLIPBOARD", false)?,
+            primary: display.intern_atom("PRIMARY", false)?,
+            secondary: display.intern_atom("SECONDARY", false)?,
+        })
+    }
+}
+
+impl ManagerAtoms {
+    fn new(display: &Display) -> Result<Self, Error> {
+        Ok(Self {
+            manager: display.intern_atom("CLIPBOARD_MANAGER", false)?,
+            save_targets: display.intern_atom("SAVE_TARGETS", false)?,
+        })
+    }
+}
+
+impl ProtocolAtoms {
+    fn new(display: &Display) -> Result<Self, Error> {
+        Ok(Self {
+            targets: display.intern_atom("TARGETS", false)?,
+            atom: display.intern_atom("ATOM", false)?,
+            incremental: display.intern_atom("INCR", false)?,
+        })
+    }
+}
+
+impl FormatAtoms {
+    fn new(display: &Display) -> Result<Self, Error> {
+        Ok(Self {
+            text: TextFormatAtoms::new(display)?,
+            rich: RichFormatAtoms::new(display)?,
+        })
+    }
+}
+
+impl TextFormatAtoms {
+    fn new(display: &Display) -> Result<Self, Error> {
+        Ok(Self {
+            utf8_string: display.intern_atom("UTF8_STRING", false)?,
+            utf8_mime: display.intern_atom("text/plain;charset=utf-8", false)?,
+            utf8_mime_alt: display.intern_atom("text/plain;charset=utf8", false)?,
+            string: display.intern_atom("STRING", false)?,
+            text: display.intern_atom("TEXT", false)?,
+            plain: display.intern_atom("text/plain", false)?,
+        })
+    }
+}
+
+impl RichFormatAtoms {
+    fn new(display: &Display) -> Result<Self, Error> {
+        Ok(Self {
+            html: display.intern_atom("text/html", false)?,
+            rtf: display.intern_atom("text/rtf", false)?,
+            png: display.intern_atom("image/png", false)?,
+            jpeg: display.intern_atom("image/jpeg", false)?,
+            tiff: display.intern_atom("image/tiff", false)?,
+            pdf: display.intern_atom("application/pdf", false)?,
+            uri_list: display.intern_atom("text/uri-list", false)?,
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Target {
+    pub atom: Atom,
+    pub name: Option<String>,
+}
+
+impl From<Atom> for Target {
+    fn from(atom: Atom) -> Target {
+        Target { atom, name: None }
+    }
+}
+
+impl Target {
+    pub fn new(atom: Atom, name: Option<String>) -> Target {
+        Target { atom, name }
+    }
+
+    pub fn atom(&self) -> Atom {
+        self.atom
+    }
+
+    pub fn name(&self) -> Option<&str> {
+        self.name.as_deref()
+    }
+}
+
+#[derive(Clone)]
+struct Storage {
     window: Window,
     property: Atom,
 }
 
 pub struct Clipboard {
     display: Display,
-    target: Target,
+    storage: Storage,
     atoms: Atoms,
     data: Arc<RwLock<ClipboardData>>,
     listener: ListenerHandle,
@@ -88,7 +239,7 @@ impl Clipboard {
         let display = display::open(display)?;
         let root = display.default_root_window()?;
 
-        let target = Target {
+        let storage = Storage {
             window: root.create_window(WindowArguments {
                 depth: root.depth(),
                 x: 0,
@@ -103,16 +254,12 @@ impl Clipboard {
             property: display.intern_atom("SKIBIDI_TOILET", false)?,
         };
 
-        let atoms = Atoms {
-            clipboard: display.intern_atom("CLIPBOARD", false)?,
-            utf8: display.intern_atom("UTF8_STRING", false)?,
-        };
-
+        let atoms = Atoms::new(&display)?;
         let data = Arc::new(RwLock::new(ClipboardData::new()));
 
         let listener = ListenerHandle::spawn(
             display.clone(),
-            target.clone(),
+            storage.clone(),
             atoms.clone(),
             data.clone(),
             Arc::new(AtomicBool::new(false)),
@@ -120,56 +267,102 @@ impl Clipboard {
 
         Ok(Clipboard {
             display,
-            target,
+            storage,
             atoms,
             data,
             listener,
         })
     }
 
-    /// set text into the clipboard
-    pub fn set_text(&self, text: &str) -> Result<(), Error> {
-        self.target
-            .window
-            .set_selection_owner(self.atoms.clipboard)?;
-
-        write!(self.data).map(|mut lock| lock.set(text.as_bytes(), self.atoms.utf8))
-    }
-
-    fn to_string(&self, bytes: Vec<u8>) -> Result<String, Error> {
-        String::from_utf8(bytes).map_err(|err| Error::Other { error: err.into() })
-    }
-
-    fn get_selection(&self) -> Result<Vec<u8>, Error> {
+    fn convert_selection(&self, selection: Atom, target: Atom) -> Result<Vec<u8>, Error> {
         write!(self.data)?.reset();
 
-        self.target.window.convert_selection(
-            self.atoms.clipboard,
-            self.atoms.utf8,
-            self.target.property,
-        )?;
+        self.storage
+            .window
+            .convert_selection(selection, target, self.storage.property)?;
 
         while !read!(self.data)?.poll() {}
 
         read!(self.data).map(|data| data.get())
     }
 
+    fn get_bytes(&self, target: Atom) -> Result<Option<Vec<u8>>, Error> {
+        let owner = self
+            .display
+            .get_selection_owner(self.atoms.selections.clipboard)?;
+
+        let window = self.display.window_from_id(owner)?;
+        let selection = if window.id() != self.storage.window.id() {
+            self.convert_selection(self.atoms.selections.clipboard, target)?
+        } else {
+            read!(self.data).map(|data| data.get())?
+        };
+
+        Ok(Some(selection))
+    }
+
+    fn get_string(&self, target: Atom) -> Result<Option<String>, Error> {
+        let bytes = self.get_bytes(target)?;
+        let string = bytes
+            .map(|bytes| String::from_utf8(bytes).map_err(|e| Error::Other { error: e.into() }))
+            .transpose()?;
+        Ok(string)
+    }
+}
+
+impl Clipboard {
+    /// set text into the clipboard
+    pub fn set_text(&self, text: &str) -> Result<(), Error> {
+        self.storage
+            .window
+            .set_selection_owner(self.atoms.selections.clipboard)?;
+
+        write!(self.data)
+            .map(|mut lock| lock.set(text.as_bytes(), self.atoms.formats.text.utf8_string))
+    }
+
     // TODO: this deadlocks if the owner terminates during the call
 
     /// get text from the clipboard
-    pub fn get_text(&self) -> Result<String, Error> {
-        let owner = self.display.get_selection_owner(self.atoms.clipboard)?;
+    pub fn get_text(&self) -> Result<Option<String>, Error> {
+        self.get_string(self.atoms.formats.text.utf8_string)
+    }
 
-        match self.display.window_from_id(owner) {
-            Ok(window) => {
-                let selection = (window.id() != self.target.window.id())
-                    .then(|| self.get_selection())
-                    .unwrap_or(read!(self.data).map(|data| data.get()))?;
+    pub fn get_html(&self) -> Result<Option<String>, Error> {
+        self.get_string(self.atoms.formats.rich.html)
+    }
 
-                self.to_string(selection)
+    pub fn get_rtf(&self) -> Result<Option<String>, Error> {
+        self.get_string(self.atoms.formats.rich.rtf)
+    }
+
+    pub fn get_uri_list(&self) -> Result<Option<Vec<String>>, Error> {
+        let uris = self
+            .get_string(self.atoms.formats.rich.uri_list)?
+            .map(|string| string.lines().map(|line| line.to_string()).collect());
+        Ok(uris)
+    }
+
+    pub fn get_plain_text(&self) -> Result<Option<String>, Error> {
+        self.get_string(self.atoms.formats.text.utf8_string)
+            .or_else(|_| self.get_string(self.atoms.formats.text.plain))
+            .or_else(|_| self.get_string(self.atoms.formats.text.string))
+    }
+
+    pub fn get_targets(&self) -> Result<Vec<Target>, Error> {
+        let targets =
+            self.convert_selection(self.atoms.selections.clipboard, self.atoms.protocol.targets)?;
+        let mut atoms = vec![];
+
+        for i in 0..targets.len() / 4 {
+            let bytes = &targets[i * 4..(i + 1) * 4];
+            if let Ok(atom) = Atom::try_from(bytes) {
+                atoms.push(atom);
             }
-            Err(_) => Ok(String::new()),
         }
+
+        let targets = atoms.into_iter().map(Target::from).collect();
+        Ok(targets)
     }
 }
 
@@ -181,7 +374,7 @@ struct ListenerHandle {
 impl ListenerHandle {
     pub fn spawn(
         display: Display,
-        target: Target,
+        target: Storage,
         atoms: Atoms,
         data: Arc<RwLock<ClipboardData>>,
         kill: Arc<AtomicBool>,
@@ -207,7 +400,7 @@ impl ListenerHandle {
 
 struct Listener {
     display: Display,
-    target: Target,
+    target: Storage,
     atoms: Atoms,
     data: Arc<RwLock<ClipboardData>>,
     kill: Arc<AtomicBool>,
@@ -216,7 +409,7 @@ struct Listener {
 impl Listener {
     pub fn new(
         display: Display,
-        target: Target,
+        target: Storage,
         atoms: Atoms,
         data: Arc<RwLock<ClipboardData>>,
         kill: Arc<AtomicBool>,
@@ -288,18 +481,18 @@ impl Listener {
                         self.handle_request(time, owner, selection, target, property)?;
                     }
                     Event::SelectionNotify { property, .. } => {
-                        let (bytes, _) = self.target.window.get_property(
+                        if let Some((bytes, _)) = self.target.window.get_property(
                             self.target.property,
                             Atom::ANY_PROPERTY_TYPE,
                             false,
-                        )?;
+                        )? {
+                            let bytes = property
+                                .is_null()
+                                .then(|| Vec::new())
+                                .unwrap_or_else(|| bytes);
 
-                        let bytes = property
-                            .is_null()
-                            .then(|| Vec::new())
-                            .unwrap_or_else(|| bytes);
-
-                        write!(self.data)?.set(&bytes, self.atoms.utf8);
+                            write!(self.data)?.set(&bytes, self.atoms.formats.text.utf8_string);
+                        }
                     }
                     _ => {}
                 }
