@@ -177,6 +177,21 @@ impl Atom {
     }
 }
 
+impl TryFrom<&[u8]> for Atom {
+    type Error = Error;
+
+    fn try_from(bytes: &[u8]) -> Result<Atom, Error> {
+        match bytes.len() {
+            4 => {
+                let ne_bytes = bytes.try_into().map_err(|_| Error::InvalidAtom)?;
+                let id = u32::from_ne_bytes(ne_bytes);
+                Ok(Atom::new(id))
+            }
+            _ => Err(Error::InvalidAtom),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Visual {
     pub id: u32,
