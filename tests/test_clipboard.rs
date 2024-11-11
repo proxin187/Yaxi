@@ -42,7 +42,7 @@ mod tests {
         assert!(result.is_ok());
 
         let text = clipboard.get_text().unwrap();
-        assert_eq!(excepted, text);
+        assert_eq!(Some(excepted), text);
     }
 
     #[test]
