@@ -5,7 +5,8 @@ use crate::keyboard::Keysym;
 use crate::window::ConfigureValue;
 
 use std::sync::atomic::{AtomicU16, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard, Condvar};
+use std::collections::VecDeque;
 
 macro_rules! lock {
     ($mutex:expr) => {
@@ -135,7 +136,8 @@ impl From<u8> for ErrorCode {
 
 #[derive(Debug)]
 pub struct Queue<T: std::fmt::Debug + Clone> {
-    queue: Arc<Mutex<Vec<T>>>,
+    cond: Arc<Condvar>,
+    queue: Arc<Mutex<VecDeque<T>>>,
     errors: Arc<Mutex<Vec<Error>>>,
 }
 
@@ -145,6 +147,7 @@ where
 {
     fn clone(&self) -> Queue<T> {
         Queue {
+            cond: self.cond.clone(),
             queue: self.queue.clone(),
             errors: self.errors.clone(),
         }
@@ -157,7 +160,8 @@ where
 {
     pub fn new(errors: Arc<Mutex<Vec<Error>>>) -> Queue<T> {
         Queue {
-            queue: Arc::new(Mutex::new(Vec::new())),
+            cond: Arc::new(Condvar::new()),
+            queue: Arc::new(Mutex::new(VecDeque::new())),
             errors,
         }
     }
@@ -169,22 +173,41 @@ where
         Ok(!lock!(self.queue)?.is_empty())
     }
 
+    #[inline]
+    pub fn pop(&self, guard: &mut MutexGuard<'_, VecDeque<T>>) -> Result<Option<T>, Error> {
+        self.poll_error()?;
+
+        Ok(guard.pop_front())
+    }
+
     pub fn wait(&self) -> Result<T, Error> {
-        while !self.poll()? {}
+        let mut lock = lock!(self.queue)?;
 
-        let index = lock!(self.queue)?.len() - 1;
-
-        lock!(self.queue).map(|mut lock| lock.remove(index))
+        loop {
+            if let Some(element) = self.pop(&mut lock)? {
+                return Ok(element);
+            } else {
+                lock = self.cond.wait(lock).map_err(|_| Error::FailedToWait)?;
+            }
+        }
     }
 
     #[inline]
     pub fn push(&self, element: T) -> Result<(), Error> {
-        lock!(self.queue).map(|mut lock| lock.push(element))
+        lock!(self.queue)?.push_back(element);
+
+        self.cond.notify_all();
+
+        Ok(())
     }
 
     #[inline]
     pub fn push_error(&self, error: Error) -> Result<(), Error> {
-        lock!(self.errors).map(|mut lock| lock.push(error))
+        lock!(self.errors)?.push(error);
+
+        self.cond.notify_all();
+
+        Ok(())
     }
 
     #[inline]
