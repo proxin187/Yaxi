@@ -443,12 +443,12 @@ impl Display {
     }
 
     /// get an atom from its name
-    pub fn intern_atom<'a>(&self, name: &'a str, only_if_exists: bool) -> Result<Atom, Error> {
+    pub fn intern_atom(&self, name: &str, only_if_exists: bool) -> Result<Atom, Error> {
         self.sequence.append(ReplyKind::InternAtom)?;
 
         let request = InternAtom {
             opcode: Opcode::INTERN_ATOM,
-            only_if_exists: only_if_exists.then(|| 1).unwrap_or(0),
+            only_if_exists: if only_if_exists { 1 } else { 0 },
             length: 2 + (name.len() as u16 + request::pad(name.len()) as u16) / 4,
             name_len: name.len() as u16,
             pad1: [0u8; 2],
