@@ -743,6 +743,8 @@ impl EventListener {
             ReplyKind::GetProperty => {
                 let response: GetPropertyResponse = self.stream.recv_decode()?;
 
+                // TODO: fix the problem here
+
                 self.replies.push(Reply::GetProperty {
                     type_: Atom::new(response.type_),
                     value: match event.detail {

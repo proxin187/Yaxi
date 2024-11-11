@@ -463,8 +463,6 @@ impl Listener {
         )
     }
 
-    // TODO: the issue may be that this returns a error?
-
     pub fn listen(&mut self) -> Result<(), Error> {
         while !self.kill.load(Ordering::Relaxed) {
             if self.display.poll_event()? {
