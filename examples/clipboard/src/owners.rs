@@ -1,7 +1,7 @@
 use yaxi::display;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut display = display::open(None)?;
+    let display = display::open(None)?;
 
     let selections = [
         display.intern_atom("PRIMARY", false)?,
