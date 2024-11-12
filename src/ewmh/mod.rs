@@ -8,6 +8,7 @@ pub(crate) struct EwmhAtoms {
     pub(crate) net_client_list: Atom,
     pub(crate) net_client_list_stacking: Atom,
     pub(crate) net_current_desktop: Atom,
+    pub(crate) net_desktop_names: Atom,
     pub(crate) net_desktop_geometry: Atom,
     pub(crate) net_desktop_viewport: Atom,
     pub(crate) net_number_of_desktops: Atom,
@@ -42,6 +43,7 @@ impl Display {
             net_client_list: self.intern_atom("_NET_CLIENT_LIST", false)?,
             net_client_list_stacking: self.intern_atom("_NET_CLIENT_LIST_STACKING", false)?,
             net_current_desktop: self.intern_atom("_NET_CURRENT_DESKTOP", false)?,
+            net_desktop_names: self.intern_atom("_NET_CURRENT_DESKTOP", false)?,
             net_desktop_geometry: self.intern_atom("_NET_DESKTOP_GEOMETRY", false)?,
             net_desktop_viewport: self.intern_atom("_NET_DESKTOP_VIEWPORT", false)?,
             net_number_of_desktops: self.intern_atom("_NET_NUMBER_OF_DESKTOPS", false)?,
@@ -88,6 +90,11 @@ pub enum EwmhWindowType {
 pub struct DesktopGeometry {
     pub width: u32,
     pub height: u32,
+}
+
+pub struct DesktopViewport {
+    pub x: u32,
+    pub y: u32,
 }
 
 

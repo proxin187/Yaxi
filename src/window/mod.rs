@@ -8,6 +8,7 @@ use crate::proto::*;
 use crate::ewmh::*;
 
 use std::collections::HashMap;
+use std::string::FromUtf8Error;
 
 
 /// a builder for a list of values known as `LISTofVALUE` in proto.pdf
@@ -333,6 +334,36 @@ impl Window {
         self.get_u32_list_property(self.ewmh_atoms.net_client_list, Atom::WINDOW)
     }
 
+    /// set the client list, this list only contains the windows managed by a ewmh compliant window
+    /// manager, _NET_CLIENT_LIST has initial mapping order, starting with the oldest window
+
+    #[cfg(feature = "ewmh")]
+    pub fn ewmh_set_client_list(&self, clients: &[u32]) -> Result<(), Error> {
+        self.set_u32_list_property(self.ewmh_atoms.net_client_list, Atom::WINDOW, PropFormat::Format32, clients)
+    }
+
+    /// get the names of virtual desktops, (wrapper for _NET_DESKTOP_NAMES)
+
+    #[cfg(feature = "ewmh")]
+    pub fn ewmh_get_desktop_names(&self) -> Result<Option<Vec<Result<String, FromUtf8Error>>>, Error> {
+        self.map_property(self.ewmh_atoms.net_desktop_names, self.ewmh_atoms.utf8, |data, _| {
+            data.split(|character| *character == 0)
+                .map(|desktop| String::from_utf8(desktop.to_vec()))
+                .collect::<Vec<Result<String, FromUtf8Error>>>()
+        })
+    }
+
+    /// set the names of virtual desktops, (wrapper for _NET_DESKTOP_NAMES)
+
+    #[cfg(feature = "ewmh")]
+    pub fn ewmh_set_desktop_names(&self, desktops: &[String]) -> Result<(), Error> {
+        let bytes = desktops.iter()
+            .flat_map(|desktop| [desktop.as_bytes(), &[0]].concat())
+            .collect::<Vec<u8>>();
+
+        self.change_property(self.ewmh_atoms.net_desktop_names, self.ewmh_atoms.utf8, PropFormat::Format8, PropMode::Replace, &bytes)
+    }
+
     /// get the stacked client list, this list only contains the windows managed by a ewmh compliant window
     /// manager, _NET_CLIENT_LIST_STACKING has bottom-to-top stacking order
 
@@ -347,6 +378,20 @@ impl Window {
     pub fn ewmh_get_current_desktop(&self) -> Result<Option<u32>, Error> {
         self.get_u32_property(self.ewmh_atoms.net_current_desktop, Atom::CARDINAL)
     }
+
+    /// set the index of the current desktop, (wrapper for _NET_CURRENT_DESKTOP)
+
+    #[cfg(feature = "ewmh")]
+    pub fn ewmh_set_current_desktop(&self, desktop: u32) -> Result<(), Error> {
+        self.change_property(self.ewmh_atoms.net_current_desktop, Atom::CARDINAL, PropFormat::Format32, PropMode::Replace, &desktop.to_le_bytes())
+    }
+
+    // TODO: implement ewmh desktop viewport
+    /*
+    #[cfg(feature = "ewmh")]
+    pub fn ewmh_get_desktop_viewport(&self) {
+    }
+    */
 
     /// get the desktop geometry, width and height, (wrapper for _NET_DESKTOP_GEOMETRY)
 
@@ -403,6 +448,20 @@ impl Window {
         Ok(type_.unwrap_or(Vec::new()))
     }
 
+    /// get the number of desktops, (wrapper for _NET_NUMBER_OF_DESKTOPS)
+
+    #[cfg(feature = "ewmh")]
+    pub fn ewmh_get_number_of_desktops(&self) -> Result<Option<u32>, Error> {
+        self.get_u32_property(self.ewmh_atoms.net_number_of_desktops, Atom::CARDINAL)
+    }
+
+    /// set the number of desktops, (wrapper for _NET_NUMBER_OF_DESKTOPS)
+
+    #[cfg(feature = "ewmh")]
+    pub fn ewmh_set_number_of_desktops(&self, desktops: u32) -> Result<(), Error> {
+        self.change_property(self.ewmh_atoms.net_number_of_desktops, Atom::CARDINAL, PropFormat::Format32, PropMode::Replace, &desktops.to_le_bytes())
+    }
+
     #[cfg(feature = "ewmh")]
     fn get_u32_list_property(&self, property: Atom, type_: Atom) -> Result<Option<Vec<u32>>, Error> {
         self.map_property(property, type_, |data, _| {
@@ -411,6 +470,16 @@ impl Window {
                 .map(|chunk| u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
                 .collect::<Vec<u32>>()
         })
+    }
+
+    #[cfg(feature = "ewmh")]
+    fn set_u32_list_property(&self, property: Atom, type_: Atom, format: PropFormat, values: &[u32]) -> Result<(), Error> {
+        let bytes = values.iter()
+            .map(|x| x.to_le_bytes().to_vec())
+            .flatten()
+            .collect::<Vec<u8>>();
+
+        self.change_property(property, type_, format, PropMode::Replace, &bytes)
     }
 
     #[cfg(feature = "ewmh")]
