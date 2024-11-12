@@ -743,21 +743,21 @@ impl EventListener {
             ReplyKind::GetProperty => {
                 let response: GetPropertyResponse = self.stream.recv_decode()?;
 
-                // TODO: fix the problem here
+                let value_size = match event.detail {
+                    0 => 0,
+                    8 => response.value_len as usize,
+                    16 => response.value_len as usize * 2,
+                    32 => response.value_len as usize * 4,
+                    _ => unreachable!(),
+                };
 
                 self.replies.push(Reply::GetProperty {
                     type_: Atom::new(response.type_),
-                    value: match event.detail {
-                        0 => Vec::new(),
-                        8 => self.stream.recv(response.value_len as usize)?,
-                        16 => self.stream.recv(response.value_len as usize * 2)?,
-                        32 => self.stream.recv(response.value_len as usize * 4)?,
-                        _ => unreachable!(),
-                    },
+                    value: self.stream.recv(value_size)?,
                 })?;
 
                 self.stream
-                    .recv(request::pad(response.value_len as usize))?;
+                    .recv(request::pad(value_size))?;
             }
             ReplyKind::GetKeyboardMapping => {
                 let response: KeyboardMappingResponse = self.stream.recv_decode()?;
