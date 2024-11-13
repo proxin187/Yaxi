@@ -386,12 +386,32 @@ impl Window {
         self.change_property(self.ewmh_atoms.net_current_desktop, Atom::CARDINAL, PropFormat::Format32, PropMode::Replace, &desktop.to_le_bytes())
     }
 
-    // TODO: implement ewmh desktop viewport
-    /*
+    /// get the desktop viewport, (wrapper for _NET_DESKTOP_VIEWPORT)
+
     #[cfg(feature = "ewmh")]
-    pub fn ewmh_get_desktop_viewport(&self) {
+    pub fn ewmh_get_desktop_viewport(&self) -> Result<Option<Vec<DesktopViewport>>, Error> {
+        self.map_property(self.ewmh_atoms.net_desktop_viewport, Atom::CARDINAL, |data, _| {
+            data.chunks(8)
+                .filter(|chunk| chunk.len() == 8)
+                .map(|chunk| DesktopViewport {
+                    x: u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]),
+                    y: u32::from_le_bytes([chunk[4], chunk[5], chunk[6], chunk[7]]),
+                })
+                .collect::<Vec<DesktopViewport>>()
+        })
     }
-    */
+
+    /// set the desktop viewport, (wrapper for _NET_DESKTOP_VIEWPORT)
+
+    #[cfg(feature = "ewmh")]
+    pub fn ewmh_set_desktop_viewport(&self, viewport: &[DesktopViewport]) -> Result<(), Error> {
+        let data = viewport.iter()
+            .flat_map(|desktop| [desktop.x.to_le_bytes().to_vec(), desktop.y.to_le_bytes().to_vec()])
+            .flatten()
+            .collect::<Vec<u8>>();
+
+        self.change_property(self.ewmh_atoms.net_desktop_viewport, Atom::CARDINAL, PropFormat::Format32, PropMode::Replace, &data)
+    }
 
     /// get the desktop geometry, width and height, (wrapper for _NET_DESKTOP_GEOMETRY)
 
