@@ -238,7 +238,7 @@ pub struct Window {
     id: u32,
 
     #[cfg(feature = "ewmh")]
-    ewmh_atoms: EwmhAtoms,
+    ewmh_atoms: Atoms,
 }
 
 impl Window {
@@ -251,7 +251,7 @@ impl Window {
         id: u32,
 
         #[cfg(feature = "ewmh")]
-        ewmh_atoms: EwmhAtoms,
+        ewmh_atoms: Atoms,
     ) -> Window {
         Window {
             stream,
@@ -274,7 +274,7 @@ impl Window {
         id: u32,
 
         #[cfg(feature = "ewmh")]
-        ewmh_atoms: EwmhAtoms,
+        ewmh_atoms: Atoms,
     ) -> Result<Window, Error> {
         sequence.append(ReplyKind::GetWindowAttributes)?;
 
@@ -319,203 +319,14 @@ impl Window {
         Ok(property.unwrap_or(false))
     }
 
-    /// get the current active window (wrapper for _NET_ACTIVE_WINDOW)
+    /// get the ewmh interface for the window
 
     #[cfg(feature = "ewmh")]
-    pub fn ewmh_get_active_window(&self) -> Result<Option<u32>, Error> {
-        self.get_u32_property(self.ewmh_atoms.net_active_window, Atom::WINDOW)
-    }
-
-    /// get the client list, this list only contains the windows managed by a ewmh compliant window
-    /// manager, _NET_CLIENT_LIST has initial mapping order, starting with the oldest window
-
-    #[cfg(feature = "ewmh")]
-    pub fn ewmh_get_client_list(&self) -> Result<Option<Vec<u32>>, Error> {
-        self.get_u32_list_property(self.ewmh_atoms.net_client_list, Atom::WINDOW)
-    }
-
-    /// set the client list, this list only contains the windows managed by a ewmh compliant window
-    /// manager, _NET_CLIENT_LIST has initial mapping order, starting with the oldest window
-
-    #[cfg(feature = "ewmh")]
-    pub fn ewmh_set_client_list(&self, clients: &[u32]) -> Result<(), Error> {
-        self.set_u32_list_property(self.ewmh_atoms.net_client_list, Atom::WINDOW, PropFormat::Format32, clients)
-    }
-
-    /// get the names of virtual desktops, (wrapper for _NET_DESKTOP_NAMES)
-
-    #[cfg(feature = "ewmh")]
-    pub fn ewmh_get_desktop_names(&self) -> Result<Option<Vec<Result<String, FromUtf8Error>>>, Error> {
-        self.map_property(self.ewmh_atoms.net_desktop_names, self.ewmh_atoms.utf8, |data, _| {
-            data.split(|character| *character == 0)
-                .map(|desktop| String::from_utf8(desktop.to_vec()))
-                .collect::<Vec<Result<String, FromUtf8Error>>>()
-        })
-    }
-
-    /// set the names of virtual desktops, (wrapper for _NET_DESKTOP_NAMES)
-
-    #[cfg(feature = "ewmh")]
-    pub fn ewmh_set_desktop_names(&self, desktops: &[String]) -> Result<(), Error> {
-        let bytes = desktops.iter()
-            .flat_map(|desktop| [desktop.as_bytes(), &[0]].concat())
-            .collect::<Vec<u8>>();
-
-        self.change_property(self.ewmh_atoms.net_desktop_names, self.ewmh_atoms.utf8, PropFormat::Format8, PropMode::Replace, &bytes)
-    }
-
-    /// get the stacked client list, this list only contains the windows managed by a ewmh compliant window
-    /// manager, _NET_CLIENT_LIST_STACKING has bottom-to-top stacking order
-
-    #[cfg(feature = "ewmh")]
-    pub fn ewmh_get_client_list_stacking(&self) -> Result<Option<Vec<u32>>, Error> {
-        self.get_u32_list_property(self.ewmh_atoms.net_client_list_stacking, Atom::WINDOW)
-    }
-
-    /// get the index of the current desktop, (wrapper for _NET_CURRENT_DESKTOP)
-
-    #[cfg(feature = "ewmh")]
-    pub fn ewmh_get_current_desktop(&self) -> Result<Option<u32>, Error> {
-        self.get_u32_property(self.ewmh_atoms.net_current_desktop, Atom::CARDINAL)
-    }
-
-    /// set the index of the current desktop, (wrapper for _NET_CURRENT_DESKTOP)
-
-    #[cfg(feature = "ewmh")]
-    pub fn ewmh_set_current_desktop(&self, desktop: u32) -> Result<(), Error> {
-        self.change_property(self.ewmh_atoms.net_current_desktop, Atom::CARDINAL, PropFormat::Format32, PropMode::Replace, &desktop.to_le_bytes())
-    }
-
-    /// get the desktop viewport, (wrapper for _NET_DESKTOP_VIEWPORT)
-
-    #[cfg(feature = "ewmh")]
-    pub fn ewmh_get_desktop_viewport(&self) -> Result<Option<Vec<DesktopViewport>>, Error> {
-        self.map_property(self.ewmh_atoms.net_desktop_viewport, Atom::CARDINAL, |data, _| {
-            data.chunks(8)
-                .filter(|chunk| chunk.len() == 8)
-                .map(|chunk| DesktopViewport {
-                    x: u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]),
-                    y: u32::from_le_bytes([chunk[4], chunk[5], chunk[6], chunk[7]]),
-                })
-                .collect::<Vec<DesktopViewport>>()
-        })
-    }
-
-    /// set the desktop viewport, (wrapper for _NET_DESKTOP_VIEWPORT)
-
-    #[cfg(feature = "ewmh")]
-    pub fn ewmh_set_desktop_viewport(&self, viewport: &[DesktopViewport]) -> Result<(), Error> {
-        let data = viewport.iter()
-            .flat_map(|desktop| [desktop.x.to_le_bytes().to_vec(), desktop.y.to_le_bytes().to_vec()])
-            .flatten()
-            .collect::<Vec<u8>>();
-
-        self.change_property(self.ewmh_atoms.net_desktop_viewport, Atom::CARDINAL, PropFormat::Format32, PropMode::Replace, &data)
-    }
-
-    /// get the desktop geometry, width and height, (wrapper for _NET_DESKTOP_GEOMETRY)
-
-    #[cfg(feature = "ewmh")]
-    pub fn ewmh_get_desktop_geometry(&self) -> Result<Option<DesktopGeometry>, Error> {
-        let geometry = self.get_u32_list_property(self.ewmh_atoms.net_desktop_geometry, Atom::CARDINAL)?.map(|mut data| {
-            data.resize(2, 0);
-
-            DesktopGeometry {
-                width: data[0],
-                height: data[1],
-            }
-        });
-
-        Ok(geometry)
-    }
-
-    /// The Window Manager MUST set this property on the root window to be the ID of a child window created by himself, to indicate that a compliant window manager is active.
-
-    #[cfg(feature = "ewmh")]
-    pub fn ewmh_set_supporting_wm_check(&self, wid: u32) -> Result<(), Error> {
-        self.change_property(self.ewmh_atoms.net_supporting_wm_check, Atom::WINDOW, PropFormat::Format32, PropMode::Replace, &wid.to_le_bytes())
-    }
-
-    /// The Client SHOULD set this to the title of the window in UTF-8 encoding. If set, the Window Manager should use this in preference to WM_NAME (wrapper for _NET_WM_NAME)
-
-    #[cfg(feature = "ewmh")]
-    pub fn ewmh_set_wm_name(&self, name: &str) -> Result<(), Error> {
-        self.change_property(self.ewmh_atoms.net_wm_name, self.ewmh_atoms.utf8, PropFormat::Format8, PropMode::Replace, name.as_bytes())
-    }
-
-    #[cfg(feature = "ewmh")]
-    pub fn ewmh_get_wm_window_type(&self) -> Result<Vec<EwmhWindowType>, Error> {
-        // TODO: using a hashmap and getting the type from there is very clean but quite slow,
-        // maybe we should consider more performant alternatives
-
-        let map = HashMap::from([
-            (self.ewmh_atoms.net_wm_window_type_desktop.id(), EwmhWindowType::Desktop),
-            (self.ewmh_atoms.net_wm_window_type_dock.id(), EwmhWindowType::Dock),
-            (self.ewmh_atoms.net_wm_window_type_toolbar.id(), EwmhWindowType::Toolbar),
-            (self.ewmh_atoms.net_wm_window_type_menu.id(), EwmhWindowType::Menu),
-            (self.ewmh_atoms.net_wm_window_type_utility.id(), EwmhWindowType::Utility),
-            (self.ewmh_atoms.net_wm_window_type_splash.id(), EwmhWindowType::Splash),
-            (self.ewmh_atoms.net_wm_window_type_dialog.id(), EwmhWindowType::Dialog),
-            (self.ewmh_atoms.net_wm_window_type_normal.id(), EwmhWindowType::Normal),
-        ]);
-
-        let type_ = self.get_u32_list_property(self.ewmh_atoms.net_wm_window_type, Atom::ATOM)?.map(|data| {
-            data.iter()
-                .filter_map(|atom| map.get(atom).copied())
-                .collect::<Vec<EwmhWindowType>>()
-        });
-
-        Ok(type_.unwrap_or(Vec::new()))
-    }
-
-    /// get the number of desktops, (wrapper for _NET_NUMBER_OF_DESKTOPS)
-
-    #[cfg(feature = "ewmh")]
-    pub fn ewmh_get_number_of_desktops(&self) -> Result<Option<u32>, Error> {
-        self.get_u32_property(self.ewmh_atoms.net_number_of_desktops, Atom::CARDINAL)
-    }
-
-    /// set the number of desktops, (wrapper for _NET_NUMBER_OF_DESKTOPS)
-
-    #[cfg(feature = "ewmh")]
-    pub fn ewmh_set_number_of_desktops(&self, desktops: u32) -> Result<(), Error> {
-        self.change_property(self.ewmh_atoms.net_number_of_desktops, Atom::CARDINAL, PropFormat::Format32, PropMode::Replace, &desktops.to_le_bytes())
-    }
-
-    #[cfg(feature = "ewmh")]
-    fn get_u32_list_property(&self, property: Atom, type_: Atom) -> Result<Option<Vec<u32>>, Error> {
-        self.map_property(property, type_, |data, _| {
-            data.chunks(4)
-                .filter(|chunk| chunk.len() == 4)
-                .map(|chunk| u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
-                .collect::<Vec<u32>>()
-        })
-    }
-
-    #[cfg(feature = "ewmh")]
-    fn set_u32_list_property(&self, property: Atom, type_: Atom, format: PropFormat, values: &[u32]) -> Result<(), Error> {
-        let bytes = values.iter()
-            .map(|x| x.to_le_bytes().to_vec())
-            .flatten()
-            .collect::<Vec<u8>>();
-
-        self.change_property(property, type_, format, PropMode::Replace, &bytes)
-    }
-
-    #[cfg(feature = "ewmh")]
-    fn get_u32_property(&self, property: Atom, type_: Atom) -> Result<Option<u32>, Error> {
-        self.map_property(property, type_, |mut data, _| {
-            data.resize(4, 0);
-
-            u32::from_le_bytes([data[0], data[1], data[2], data[3]])
-        })
-    }
-
-    #[cfg(feature = "ewmh")]
-    fn map_property<F, R>(&self, property: Atom, type_: Atom, f: F) -> Result<Option<R>, Error> where F: Fn(Vec<u8>, Atom) -> R {
-        let wid = self.get_property(property, type_, false)?.map(|(data, type_)| f(data, type_));
-
-        Ok(wid)
+    pub fn ewmh(&self) -> Ewmh {
+        Ewmh {
+            atoms: self.ewmh_atoms.clone(),
+            window: self.clone(),
+        }
     }
 
     /// send an event to the window
