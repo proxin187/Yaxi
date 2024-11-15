@@ -4,12 +4,6 @@ use crate::display::xid;
 use crate::display::{Atom, Roots, Stream, Visual};
 use crate::proto::*;
 
-#[cfg(feature = "ewmh")]
-use crate::ewmh::*;
-
-use std::collections::HashMap;
-use std::string::FromUtf8Error;
-
 
 /// a builder for a list of values known as `LISTofVALUE` in proto.pdf
 pub struct ValuesBuilder<T: ValueMask> {
@@ -236,9 +230,6 @@ pub struct Window {
     visual: Visual,
     depth: u8,
     id: u32,
-
-    #[cfg(feature = "ewmh")]
-    ewmh_atoms: Atoms,
 }
 
 impl Window {
@@ -249,9 +240,6 @@ impl Window {
         visual: Visual,
         depth: u8,
         id: u32,
-
-        #[cfg(feature = "ewmh")]
-        ewmh_atoms: Atoms,
     ) -> Window {
         Window {
             stream,
@@ -260,9 +248,6 @@ impl Window {
             visual,
             depth,
             id,
-
-            #[cfg(feature = "ewmh")]
-            ewmh_atoms,
         }
     }
 
@@ -272,9 +257,6 @@ impl Window {
         sequence: SequenceManager,
         roots: Roots,
         id: u32,
-
-        #[cfg(feature = "ewmh")]
-        ewmh_atoms: Atoms,
     ) -> Result<Window, Error> {
         sequence.append(ReplyKind::GetWindowAttributes)?;
 
@@ -295,9 +277,6 @@ impl Window {
                 visual: roots.visual_from_id(response.visual)?,
                 depth: screen.response.root_depth,
                 id,
-
-                #[cfg(feature = "ewmh")]
-                ewmh_atoms,
             }),
             _ => unreachable!(),
         }
@@ -317,16 +296,6 @@ impl Window {
         });
 
         Ok(property.unwrap_or(false))
-    }
-
-    /// get the ewmh interface for the window
-
-    #[cfg(feature = "ewmh")]
-    pub fn ewmh(&self) -> Ewmh {
-        Ewmh {
-            atoms: self.ewmh_atoms.clone(),
-            window: self.clone(),
-        }
     }
 
     /// send an event to the window
@@ -506,9 +475,6 @@ impl Window {
             window.visual,
             window.depth,
             wid,
-
-            #[cfg(feature = "ewmh")]
-            self.ewmh_atoms.clone(),
         ))
     }
 

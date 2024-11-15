@@ -14,7 +14,7 @@ use crate::extension::Extension;
 use crate::extension::xinerama::Xinerama;
 
 #[cfg(feature = "ewmh")]
-use crate::ewmh::EwmhAtoms;
+use crate::ewmh::Ewmh;
 
 use crate::keyboard::*;
 use crate::proto::*;
@@ -28,9 +28,11 @@ use std::fs::File;
 use std::io::{Read, Write};
 use std::net::{IpAddr, SocketAddr, TcpStream};
 use std::os::unix::net::UnixStream;
-use std::str::FromStr;
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::thread;
+
+use std::str::FromStr;
 
 // https://www.x.org/docs/XProtocol/proto.pdf
 
@@ -130,7 +132,7 @@ impl Stream {
 
 /// an atom in the x11 protocol is an integer representing a string
 /// atoms in the range 1..=68 are predefined (only 1..=20 implemented so far)
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Atom {
     id: u32,
 }
@@ -189,6 +191,33 @@ impl TryFrom<&[u8]> for Atom {
             }
             _ => Err(Error::InvalidAtom),
         }
+    }
+}
+
+#[derive(Clone)]
+struct Cache<T: Clone + Copy> {
+    cache: Arc<Mutex<HashMap<String, T>>>,
+}
+
+impl<T> Cache<T> where T: Clone + Copy {
+    pub fn new() -> Cache<T> {
+        Cache {
+            cache: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+
+    pub fn get(&self, key: &str) -> Result<Option<T>, Error> {
+        lock!(self.cache).map(|cache| cache.get(key).copied())
+    }
+
+    pub fn insert(&self, key: &str, value: T) -> Result<(), Error> {
+        lock!(self.cache)?.insert(key.to_string(), value);
+
+        Ok(())
+    }
+
+    pub fn clear(&self) -> Result<(), Error> {
+        lock!(self.cache).map(|mut cache| cache.clear())
     }
 }
 
@@ -295,13 +324,11 @@ pub struct Display {
     pub(crate) roots: Roots,
     pub(crate) setup: SuccessResponse,
     pub(crate) sequence: SequenceManager,
-
-    #[cfg(feature = "ewmh")]
-    pub(crate) ewmh_atoms: EwmhAtoms,
+    pub(crate) atom_cache: Cache<Atom>,
 }
 
 impl Clone for Display {
-    /// get a thread safe clone of the display, this still points to the same event queue so
+    /// get a cheap thread safe clone of the display, this still points to the same event queue so
     /// listening for events in multiple threads is a bad and unreliable idea
     fn clone(&self) -> Display {
         Display {
@@ -311,9 +338,7 @@ impl Clone for Display {
             roots: self.roots.clone(),
             setup: self.setup.clone(),
             sequence: self.sequence.clone(),
-
-            #[cfg(feature = "ewmh")]
-            ewmh_atoms: self.ewmh_atoms.clone(),
+            atom_cache: self.atom_cache.clone(),
         }
     }
 }
@@ -329,15 +354,10 @@ impl Display {
             roots: Roots::new(),
             setup: SuccessResponse::default(),
             sequence: SequenceManager::new(),
-
-            #[cfg(feature = "ewmh")]
-            ewmh_atoms: EwmhAtoms::default(),
+            atom_cache: Cache::new(),
         };
 
         display.setup()?;
-
-        #[cfg(feature = "ewmh")]
-        display.load_ewmh_atoms()?;
 
         Ok(display)
     }
@@ -360,9 +380,6 @@ impl Display {
             self.sequence.clone(),
             self.roots.clone(),
             id,
-
-            #[cfg(feature = "ewmh")]
-            self.ewmh_atoms.clone(),
         )
     }
 
@@ -377,9 +394,6 @@ impl Display {
             self.roots.visual_from_id(screen.response.root_visual)?,
             screen.response.root_depth,
             screen.response.root,
-
-            #[cfg(feature = "ewmh")]
-            self.ewmh_atoms.clone(),
         ))
     }
 
@@ -426,6 +440,16 @@ impl Display {
         ))
     }
 
+    /// get the ewmh interface for the window
+
+    #[cfg(feature = "ewmh")]
+    pub fn use_ewmh(&self, window: &Window) -> Ewmh {
+        Ewmh {
+            display: self.clone(),
+            window: window.clone(),
+        }
+    }
+
     /// this request returns the current focused window
     pub fn get_input_focus(&self) -> Result<GetInputFocusResponse, Error> {
         self.sequence.append(ReplyKind::GetInputFocus)?;
@@ -442,34 +466,49 @@ impl Display {
         }
     }
 
-    /// get an atom from its name
+    /// get an atom from its name, this function is cached and will not perform a request if the
+    /// atom is in the cache, use clear_atom_cache(), to clear the cache.
     pub fn intern_atom(&self, name: &str, only_if_exists: bool) -> Result<Atom, Error> {
-        self.sequence.append(ReplyKind::InternAtom)?;
+        if let Some(atom) = self.atom_cache.get(name)? {
+            Ok(atom)
+        } else {
+            self.sequence.append(ReplyKind::InternAtom)?;
 
-        let request = InternAtom {
-            opcode: Opcode::INTERN_ATOM,
-            only_if_exists: if only_if_exists { 1 } else { 0 },
-            length: 2 + (name.len() as u16 + request::pad(name.len()) as u16) / 4,
-            name_len: name.len() as u16,
-            pad1: [0u8; 2],
-        };
+            let request = InternAtom {
+                opcode: Opcode::INTERN_ATOM,
+                only_if_exists: if only_if_exists { 1 } else { 0 },
+                length: 2 + (name.len() as u16 + request::pad(name.len()) as u16) / 4,
+                name_len: name.len() as u16,
+                pad1: [0u8; 2],
+            };
 
-        self.stream.send(
-            &[
-                request::encode(&request).to_vec(),
-                name.as_bytes().to_vec(),
-                vec![0u8; request::pad(name.as_bytes().len())],
-            ]
-            .concat(),
-        )?;
+            self.stream.send(
+                &[
+                    request::encode(&request).to_vec(),
+                    name.as_bytes().to_vec(),
+                    vec![0u8; request::pad(name.as_bytes().len())],
+                ]
+                .concat(),
+            )?;
 
-        match self.replies.wait()? {
-            Reply::InternAtom(response) => match response.atom {
-                u32::MIN => Err(Error::InvalidAtom),
-                _ => Ok(Atom::new(response.atom)),
-            },
-            _ => unreachable!(),
+            match self.replies.wait()? {
+                Reply::InternAtom(response) => match response.atom {
+                    u32::MIN => Err(Error::InvalidAtom),
+                    _ => {
+                        self.atom_cache.insert(name, Atom::new(response.atom))?;
+
+                        Ok(Atom::new(response.atom))
+                    },
+                },
+                _ => unreachable!(),
+            }
         }
+    }
+
+    /// this function will clear the atom cache, this ensures that the `intern_atom` function will
+    /// always return a fresh atom
+    pub fn clear_atom_cache(&self) -> Result<(), Error> {
+        self.atom_cache.clear()
     }
 
     /// get the owner of a selection, (this function returns the window id, use
