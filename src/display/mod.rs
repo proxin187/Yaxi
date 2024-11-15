@@ -24,11 +24,11 @@ use error::Error;
 use parse::Protocol;
 use request::*;
 
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::net::{IpAddr, SocketAddr, TcpStream};
 use std::os::unix::net::UnixStream;
-use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::thread;
 
@@ -199,7 +199,10 @@ struct Cache<T: Clone + Copy> {
     cache: Arc<Mutex<HashMap<String, T>>>,
 }
 
-impl<T> Cache<T> where T: Clone + Copy {
+impl<T> Cache<T>
+where
+    T: Clone + Copy,
+{
     pub fn new() -> Cache<T> {
         Cache {
             cache: Arc::new(Mutex::new(HashMap::new())),
@@ -498,7 +501,7 @@ impl Display {
                         self.atom_cache.insert(name, Atom::new(response.atom))?;
 
                         Ok(Atom::new(response.atom))
-                    },
+                    }
                 },
                 _ => unreachable!(),
             }
@@ -795,8 +798,7 @@ impl EventListener {
                     value: self.stream.recv(value_size)?,
                 })?;
 
-                self.stream
-                    .recv(request::pad(value_size))?;
+                self.stream.recv(request::pad(value_size))?;
             }
             ReplyKind::GetKeyboardMapping => {
                 let response: KeyboardMappingResponse = self.stream.recv_decode()?;

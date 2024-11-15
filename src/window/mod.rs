@@ -4,7 +4,6 @@ use crate::display::xid;
 use crate::display::{Atom, Roots, Stream, Visual};
 use crate::proto::*;
 
-
 /// a builder for a list of values known as `LISTofVALUE` in proto.pdf
 pub struct ValuesBuilder<T: ValueMask> {
     values: Vec<T>,
@@ -287,13 +286,17 @@ impl Window {
 
     #[cfg(feature = "extras")]
     pub fn property_contains(&self, property: Atom, atoms: &[Atom]) -> Result<bool, Error> {
-        let property = self.get_property(property, Atom::ATOM, false)?.map(|(mut data, _)| {
-            data.resize(data.len().max(4), 0);
+        let property = self
+            .get_property(property, Atom::ATOM, false)?
+            .map(|(mut data, _)| {
+                data.resize(data.len().max(4), 0);
 
-            data.windows(4)
-                .map(|chunk| Atom::new(u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]])))
-                .any(|value| atoms.contains(&value))
-        });
+                data.windows(4)
+                    .map(|chunk| {
+                        Atom::new(u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
+                    })
+                    .any(|value| atoms.contains(&value))
+            });
 
         Ok(property.unwrap_or(false))
     }
@@ -711,7 +714,10 @@ impl Window {
         })?;
 
         match self.replies.wait()? {
-            Reply::GetProperty { type_, value } => Ok(type_.is_null().then(|| None).unwrap_or(Some((value, type_)))),
+            Reply::GetProperty { type_, value } => Ok(type_
+                .is_null()
+                .then(|| None)
+                .unwrap_or(Some((value, type_)))),
             _ => unreachable!(),
         }
     }

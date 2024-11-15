@@ -1,6 +1,5 @@
 use yaxi::display;
 
-
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let display = display::open(None)?;
     let root = display.default_root_window()?;
@@ -11,4 +10,3 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
-

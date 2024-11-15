@@ -4,9 +4,9 @@ use crate::display::Atom;
 use crate::keyboard::Keysym;
 use crate::window::ConfigureValue;
 
-use std::sync::atomic::{AtomicU16, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard, Condvar};
 use std::collections::VecDeque;
+use std::sync::atomic::{AtomicU16, Ordering};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 
 macro_rules! lock {
     ($mutex:expr) => {
