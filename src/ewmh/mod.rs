@@ -40,7 +40,7 @@ pub struct Ewmh {
 
 impl Ewmh {
     /// get the current active window, (wrapper for _NET_ACTIVE_WINDOW)
-    pub fn ewmh_get_active_window(&self) -> Result<Option<u32>, Error> {
+    pub fn get_active_window(&self) -> Result<Option<u32>, Error> {
         let atom = self.display.intern_atom("_NET_ACTIVE_WINDOW", false)?;
 
         self.get_u32_property(atom, Atom::WINDOW)
@@ -48,7 +48,7 @@ impl Ewmh {
 
     /// get the client list, this list only contains the windows managed by a ewmh compliant window
     /// manager, _NET_CLIENT_LIST has initial mapping order, starting with the oldest window
-    pub fn ewmh_get_client_list(&self) -> Result<Option<Vec<u32>>, Error> {
+    pub fn get_client_list(&self) -> Result<Option<Vec<u32>>, Error> {
         let atom = self.display.intern_atom("_NET_CLIENT_LIST", false)?;
 
         self.get_u32_list_property(atom, Atom::WINDOW)
@@ -56,14 +56,14 @@ impl Ewmh {
 
     /// set the client list, this list only contains the windows managed by a ewmh compliant window
     /// manager, _NET_CLIENT_LIST has initial mapping order, starting with the oldest window
-    pub fn ewmh_set_client_list(&self, clients: &[u32]) -> Result<(), Error> {
+    pub fn set_client_list(&self, clients: &[u32]) -> Result<(), Error> {
         let atom = self.display.intern_atom("_NET_CLIENT_LIST", false)?;
 
         self.set_u32_list_property(atom, Atom::WINDOW, PropFormat::Format32, clients)
     }
 
     /// get the names of virtual desktops, (wrapper for _NET_DESKTOP_NAMES)
-    pub fn ewmh_get_desktop_names(
+    pub fn get_desktop_names(
         &self,
     ) -> Result<Option<Vec<Result<String, FromUtf8Error>>>, Error> {
         let atom = self.display.intern_atom("_NET_DESKTOP_NAMES", false)?;
@@ -77,7 +77,7 @@ impl Ewmh {
     }
 
     /// set the names of virtual desktops, (wrapper for _NET_DESKTOP_NAMES)
-    pub fn ewmh_set_desktop_names(&self, desktops: &[String]) -> Result<(), Error> {
+    pub fn set_desktop_names(&self, desktops: &[String]) -> Result<(), Error> {
         let atom = self.display.intern_atom("_NET_DESKTOP_NAMES", false)?;
         let utf8 = self.display.intern_atom("UTF8_STRING", false)?;
 
@@ -92,7 +92,7 @@ impl Ewmh {
 
     /// get the stacked client list, this list only contains the windows managed by a ewmh compliant window
     /// manager, _NET_CLIENT_LIST_STACKING has bottom-to-top stacking order
-    pub fn ewmh_get_client_list_stacking(&self) -> Result<Option<Vec<u32>>, Error> {
+    pub fn get_client_list_stacking(&self) -> Result<Option<Vec<u32>>, Error> {
         let atom = self
             .display
             .intern_atom("_NET_CLIENT_LIST_STACKING", false)?;
@@ -101,14 +101,14 @@ impl Ewmh {
     }
 
     /// get the index of the current desktop, (wrapper for _NET_CURRENT_DESKTOP)
-    pub fn ewmh_get_current_desktop(&self) -> Result<Option<u32>, Error> {
+    pub fn get_current_desktop(&self) -> Result<Option<u32>, Error> {
         let atom = self.display.intern_atom("_NET_CURRENT_DESKTOP", false)?;
 
         self.get_u32_property(atom, Atom::CARDINAL)
     }
 
     /// set the index of the current desktop, (wrapper for _NET_CURRENT_DESKTOP)
-    pub fn ewmh_set_current_desktop(&self, desktop: u32) -> Result<(), Error> {
+    pub fn set_current_desktop(&self, desktop: u32) -> Result<(), Error> {
         let atom = self.display.intern_atom("_NET_CURRENT_DESKTOP", false)?;
 
         self.window.change_property(
@@ -121,7 +121,7 @@ impl Ewmh {
     }
 
     /// get the desktop viewport, (wrapper for _NET_DESKTOP_VIEWPORT)
-    pub fn ewmh_get_desktop_viewport(&self) -> Result<Option<Vec<DesktopViewport>>, Error> {
+    pub fn get_desktop_viewport(&self) -> Result<Option<Vec<DesktopViewport>>, Error> {
         let atom = self.display.intern_atom("_NET_DESKTOP_VIEWPORT", false)?;
 
         self.map_property(atom, Atom::CARDINAL, |data, _| {
@@ -136,7 +136,7 @@ impl Ewmh {
     }
 
     /// set the desktop viewport, (wrapper for _NET_DESKTOP_VIEWPORT)
-    pub fn ewmh_set_desktop_viewport(&self, viewport: &[DesktopViewport]) -> Result<(), Error> {
+    pub fn set_desktop_viewport(&self, viewport: &[DesktopViewport]) -> Result<(), Error> {
         let atom = self.display.intern_atom("_NET_DESKTOP_VIEWPORT", false)?;
 
         let data = viewport
@@ -160,7 +160,7 @@ impl Ewmh {
     }
 
     /// get the desktop geometry, width and height, (wrapper for _NET_DESKTOP_GEOMETRY)
-    pub fn ewmh_get_desktop_geometry(&self) -> Result<Option<DesktopGeometry>, Error> {
+    pub fn get_desktop_geometry(&self) -> Result<Option<DesktopGeometry>, Error> {
         let atom = self.display.intern_atom("_NET_DESKTOP_GEOMETRY", false)?;
 
         let geometry = self
@@ -179,7 +179,7 @@ impl Ewmh {
 
     /// The Window Manager MUST set this property on the root window to be the ID of a child window created by himself,
     /// to indicate that a compliant window manager is active, (wrapper for _NET_SUPPORTING_WM_CHECK)
-    pub fn ewmh_set_supporting_wm_check(&self, wid: u32) -> Result<(), Error> {
+    pub fn set_supporting_wm_check(&self, wid: u32) -> Result<(), Error> {
         let atom = self
             .display
             .intern_atom("_NET_SUPPORTING_WM_CHECK", false)?;
@@ -195,7 +195,7 @@ impl Ewmh {
 
     /// The Client SHOULD set this to the title of the window in UTF-8 encoding.
     /// If set, the Window Manager should use this in preference to WM_NAME (wrapper for _NET_WM_NAME)
-    pub fn ewmh_set_wm_name(&self, name: &str) -> Result<(), Error> {
+    pub fn set_wm_name(&self, name: &str) -> Result<(), Error> {
         let atom = self.display.intern_atom("_NET_WM_NAME", false)?;
         let utf8 = self.display.intern_atom("UTF8_STRING", false)?;
 
@@ -209,7 +209,7 @@ impl Ewmh {
     }
 
     /// get the window type, (wrapper for _NET_WM_WINDOW_TYPE)
-    pub fn ewmh_get_wm_window_type(&self) -> Result<Vec<EwmhWindowType>, Error> {
+    pub fn get_wm_window_type(&self) -> Result<Vec<EwmhWindowType>, Error> {
         let atom = self.display.intern_atom("_NET_WM_WINDOW_TYPE", false)?;
 
         let map = HashMap::from([
@@ -265,14 +265,14 @@ impl Ewmh {
     }
 
     /// get the number of desktops, (wrapper for _NET_NUMBER_OF_DESKTOPS)
-    pub fn ewmh_get_number_of_desktops(&self) -> Result<Option<u32>, Error> {
+    pub fn get_number_of_desktops(&self) -> Result<Option<u32>, Error> {
         let atom = self.display.intern_atom("_NET_NUMBER_OF_DESKTOPS", false)?;
 
         self.get_u32_property(atom, Atom::CARDINAL)
     }
 
     /// set the number of desktops, (wrapper for _NET_NUMBER_OF_DESKTOPS)
-    pub fn ewmh_set_number_of_desktops(&self, desktops: u32) -> Result<(), Error> {
+    pub fn set_number_of_desktops(&self, desktops: u32) -> Result<(), Error> {
         let atom = self.display.intern_atom("_NET_NUMBER_OF_DESKTOPS", false)?;
 
         self.window.change_property(
