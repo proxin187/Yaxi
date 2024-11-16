@@ -366,12 +366,12 @@ impl Display {
     }
 
     /// wait for the next event
-    pub fn next_event(&mut self) -> Result<Event, Error> {
+    pub fn next_event(&self) -> Result<Event, Error> {
         self.events.wait()
     }
 
     /// returns true if an event is ready
-    pub fn poll_event(&mut self) -> Result<bool, Error> {
+    pub fn poll_event(&self) -> Result<bool, Error> {
         self.events.poll()
     }
 

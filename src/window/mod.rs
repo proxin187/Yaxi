@@ -355,6 +355,30 @@ impl Window {
         }
     }
 
+    /// this request adds or removes the specified window from the client’s save-set, the window must have been created by some other client (or a Match error results)
+    pub fn change_save_set(&self, mode: SaveSetMode) -> Result<(), Error> {
+        self.sequence.skip();
+
+        self.stream.send_encode(ChangeSaveSet {
+            opcode: Opcode::CHANGE_SAVE_SET,
+            mode: mode.into(),
+            length: 2,
+            wid: self.id(),
+        })
+    }
+
+    /// for RaiseLowest, `circulate` raises the lowest mapped child (if any) that is occluded by another child to the top of the stack. For LowerHighest, `circulate` lowers the highest mapped child (if any) that occludes another child to the bottom of the stack
+    pub fn circulate(&self, direction: CirculateDirection) -> Result<(), Error> {
+        self.sequence.skip();
+
+        self.stream.send_encode(CirculateWindow {
+            opcode: Opcode::CIRCULATE_WINDOW,
+            direction: direction.into(),
+            length: 2,
+            wid: self.id(),
+        })
+    }
+
     /// get the geometry of the window
     pub fn get_geometry(&self) -> Result<GetGeometryResponse, Error> {
         self.sequence.append(ReplyKind::GetGeometry)?;

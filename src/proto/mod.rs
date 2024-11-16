@@ -57,12 +57,14 @@ impl Opcode {
     pub const GET_WINDOW_ATTRIBUTES: u8 = 3;
     pub const DESTROY_WINDOW: u8 = 4;
     pub const DESTROY_SUBWINDOWS: u8 = 5;
+    pub const CHANGE_SAVE_SET: u8 = 6;
     pub const REPARENT_WINDOW: u8 = 7;
     pub const MAP_WINDOW: u8 = 8;
     pub const MAP_SUBWINDOWS: u8 = 9;
     pub const UNMAP_WINDOW: u8 = 10;
     pub const UNMAP_SUBWINDOWS: u8 = 11;
     pub const CONFIGURE_WINDOW: u8 = 12;
+    pub const CIRCULATE_WINDOW: u8 = 13;
     pub const GET_GEOMETRY: u8 = 14;
     pub const INTERN_ATOM: u8 = 16;
     pub const CHANGE_PROPERTY: u8 = 18;
@@ -328,6 +330,36 @@ impl Coordinates {
             y,
             root_x,
             root_y,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum SaveSetMode {
+    Insert,
+    Delete,
+}
+
+impl Into<u8> for SaveSetMode {
+    fn into(self) -> u8 {
+        match self {
+            SaveSetMode::Insert => 0,
+            SaveSetMode::Delete => 1,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum CirculateDirection {
+    RaiseLowest,
+    LowerHighest,
+}
+
+impl Into<u8> for CirculateDirection {
+    fn into(self) -> u8 {
+        match self {
+            CirculateDirection::RaiseLowest => 0,
+            CirculateDirection::LowerHighest => 1,
         }
     }
 }

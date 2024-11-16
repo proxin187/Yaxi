@@ -803,6 +803,24 @@ pub struct SendEvent {
     pub event_mask: u32,
 }
 
+#[repr(packed, C)]
+#[derive(Debug, Clone)]
+pub struct ChangeSaveSet {
+    pub opcode: u8,
+    pub mode: u8,
+    pub length: u16,
+    pub wid: u32,
+}
+
+#[repr(packed, C)]
+#[derive(Debug, Clone)]
+pub struct CirculateWindow {
+    pub opcode: u8,
+    pub direction: u8,
+    pub length: u16,
+    pub wid: u32,
+}
+
 pub fn encode<T>(ptr: &T) -> &[u8] {
     unsafe { slice::from_raw_parts((ptr as *const T) as *const u8, mem::size_of::<T>()) }
 }
