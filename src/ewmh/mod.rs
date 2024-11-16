@@ -63,9 +63,7 @@ impl Ewmh {
     }
 
     /// get the names of virtual desktops, (wrapper for _NET_DESKTOP_NAMES)
-    pub fn get_desktop_names(
-        &self,
-    ) -> Result<Option<Vec<Result<String, FromUtf8Error>>>, Error> {
+    pub fn get_desktop_names(&self) -> Result<Option<Vec<Result<String, FromUtf8Error>>>, Error> {
         let atom = self.display.intern_atom("_NET_DESKTOP_NAMES", false)?;
         let utf8 = self.display.intern_atom("UTF8_STRING", false)?;
 
