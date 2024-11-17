@@ -26,7 +26,7 @@ pub struct DesktopGeometry {
 }
 
 impl DesktopGeometry {
-    pub fn new(&self, width: u32, height: u32) -> DesktopGeometry {
+    pub fn new(width: u32, height: u32) -> DesktopGeometry {
         DesktopGeometry {
             width,
             height,
@@ -41,7 +41,7 @@ pub struct DesktopViewport {
 }
 
 impl DesktopViewport {
-    pub fn new(&self, x: u32, y: u32) -> DesktopViewport {
+    pub fn new(x: u32, y: u32) -> DesktopViewport {
         DesktopViewport {
             x,
             y,
