@@ -39,6 +39,28 @@ pub struct Ewmh {
 }
 
 impl Ewmh {
+    /// set the supported ewmh hints, this property MUST be set by the Window Manager to indicate which hints it supports, (wrapper for _NET_SUPPORTED)
+    pub fn set_supported(&self, atoms: &[Atom]) -> Result<(), Error> {
+        let atom = self.display.intern_atom("_NET_SUPPORTED", false)?;
+
+        let values = atoms.iter().map(|atom| atom.id()).collect::<Vec<u32>>();
+
+        self.set_u32_list_property(atom, Atom::ATOM, PropFormat::Format32, &values)
+    }
+
+    /// get the supported ewmh hints, (wrapper for _NET_SUPPORTED)
+    pub fn get_supported(&self) -> Result<Option<Vec<Atom>>, Error> {
+        let atom = self.display.intern_atom("_NET_SUPPORTED", false)?;
+
+        self.get_u32_list_property(atom, Atom::ATOM)
+            .and_then(|ret| {
+                let atoms =
+                    ret.map(|atoms| atoms.iter().map(|id| Atom::new(*id)).collect::<Vec<Atom>>());
+
+                Ok(atoms)
+            })
+    }
+
     /// get the current active window, (wrapper for _NET_ACTIVE_WINDOW)
     pub fn get_active_window(&self) -> Result<Option<u32>, Error> {
         let atom = self.display.intern_atom("_NET_ACTIVE_WINDOW", false)?;
