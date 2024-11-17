@@ -25,10 +25,28 @@ pub struct DesktopGeometry {
     pub height: u32,
 }
 
+impl DesktopGeometry {
+    pub fn new(&self, width: u32, height: u32) -> DesktopGeometry {
+        DesktopGeometry {
+            width,
+            height,
+        }
+    }
+}
+
 /// this represents the window viewport x and y coordinates, https://specifications.freedesktop.org/wm-spec/1.3/ar01s03.html#id-1.4.7
 pub struct DesktopViewport {
     pub x: u32,
     pub y: u32,
+}
+
+impl DesktopViewport {
+    pub fn new(&self, x: u32, y: u32) -> DesktopViewport {
+        DesktopViewport {
+            x,
+            y,
+        }
+    }
 }
 
 /// Ewmh is a thin wrapper for window allowing the user to implement ewmh compliant applications in
