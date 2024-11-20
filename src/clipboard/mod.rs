@@ -4,23 +4,17 @@ use crate::proto::*;
 use crate::window::*;
 
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex, Condvar};
 use std::thread::{self, JoinHandle};
 
-macro_rules! write {
+macro_rules! lock {
     ($mutex:expr) => {
-        $mutex.write().map_err(|_| Error::FailedToLock)
-    };
-}
-
-macro_rules! read {
-    ($mutex:expr) => {
-        $mutex.read().map_err(|_| Error::FailedToLock)
+        $mutex.lock().map_err(|_| Error::FailedToLock)
     };
 }
 
 #[derive(Clone)]
-struct ClipboardData {
+pub struct ClipboardData {
     bytes: Option<Vec<u8>>,
     format: Atom,
 }
@@ -34,22 +28,17 @@ impl ClipboardData {
     }
 
     #[inline]
-    pub fn poll(&self) -> bool {
-        self.bytes.is_some()
-    }
-
-    #[inline]
-    pub fn reset(&mut self) {
+    fn reset(&mut self) {
         self.bytes = None
     }
 
     #[inline]
-    pub fn get(&self) -> Vec<u8> {
+    fn get(&self) -> Vec<u8> {
         self.bytes.clone().unwrap_or_default()
     }
 
     #[inline]
-    pub fn set(&mut self, bytes: &[u8], format: Atom) {
+    fn set(&mut self, bytes: &[u8], format: Atom) {
         self.bytes.replace(bytes.to_vec());
 
         self.format = format;
@@ -219,16 +208,58 @@ struct Storage {
     property: Atom,
 }
 
+pub struct Selection {
+    data: Mutex<ClipboardData>,
+    cond: Condvar,
+}
+
+impl Selection {
+    pub fn new() -> Selection {
+        Selection {
+            data: Mutex::new(ClipboardData::new()),
+            cond: Condvar::new(),
+        }
+    }
+
+    pub fn reset(&self) -> Result<(), Error> {
+        lock!(self.data)?.reset();
+
+        Ok(())
+    }
+
+    pub fn set(&self, bytes: &[u8], format: Atom) -> Result<(), Error> {
+        lock!(self.data)?.set(bytes, format);
+
+        self.cond.notify_all();
+
+        Ok(())
+    }
+
+    pub fn get(&self) -> Result<Vec<u8>, Error> {
+        let mut guard = self.data.lock().map_err(|_| Error::FailedToLock)?;
+
+        loop {
+            if let Some(bytes) = guard.bytes.clone() {
+                return Ok(bytes);
+            } else {
+                guard = self.cond.wait(guard).map_err(|_| Error::FailedToLock)?;
+            }
+        }
+    }
+}
+
 pub struct Clipboard {
     display: Display,
     storage: Storage,
     atoms: Atoms,
-    data: Arc<RwLock<ClipboardData>>,
+    selection: Arc<Selection>,
     listener: ListenerHandle,
 }
 
 impl Drop for Clipboard {
     fn drop(&mut self) {
+        // TODO: save the data to the clipboard manager here
+
         self.listener.kill();
     }
 }
@@ -255,13 +286,13 @@ impl Clipboard {
         };
 
         let atoms = Atoms::new(&display)?;
-        let data = Arc::new(RwLock::new(ClipboardData::new()));
+        let selection = Arc::new(Selection::new());
 
         let listener = ListenerHandle::spawn(
             display.clone(),
             storage.clone(),
             atoms.clone(),
-            data.clone(),
+            selection.clone(),
             Arc::new(AtomicBool::new(false)),
         );
 
@@ -269,21 +300,19 @@ impl Clipboard {
             display,
             storage,
             atoms,
-            data,
+            selection,
             listener,
         })
     }
 
     fn convert_selection(&self, selection: Atom, target: Atom) -> Result<Vec<u8>, Error> {
-        write!(self.data)?.reset();
+        self.selection.reset()?;
 
         self.storage
             .window
             .convert_selection(selection, target, self.storage.property)?;
 
-        while !read!(self.data)?.poll() {}
-
-        read!(self.data).map(|data| data.get())
+        self.selection.get()
     }
 
     fn get_bytes(&self, target: Atom) -> Result<Option<Vec<u8>>, Error> {
@@ -295,7 +324,7 @@ impl Clipboard {
         let selection = if window.id() != self.storage.window.id() {
             self.convert_selection(self.atoms.selections.clipboard, target)?
         } else {
-            read!(self.data).map(|data| data.get())?
+            lock!(self.selection.data).map(|data| data.get())?
         };
 
         Ok(Some(selection))
@@ -317,8 +346,7 @@ impl Clipboard {
             .window
             .set_selection_owner(self.atoms.selections.clipboard)?;
 
-        write!(self.data)
-            .map(|mut lock| lock.set(text.as_bytes(), self.atoms.formats.text.utf8_string))
+        self.selection.set(text.as_bytes(), self.atoms.formats.text.utf8_string)
     }
 
     // TODO: this deadlocks if the owner terminates during the call
@@ -376,14 +404,14 @@ impl ListenerHandle {
         display: Display,
         target: Storage,
         atoms: Atoms,
-        data: Arc<RwLock<ClipboardData>>,
+        selection: Arc<Selection>,
         kill: Arc<AtomicBool>,
     ) -> ListenerHandle {
         let clone = kill.clone();
 
         ListenerHandle {
             thread: thread::spawn(move || -> Result<(), Error> {
-                let mut listener = Listener::new(display, target, atoms, data, clone);
+                let mut listener = Listener::new(display, target, atoms, selection, clone);
 
                 listener.listen()
             }),
@@ -402,7 +430,7 @@ struct Listener {
     display: Display,
     target: Storage,
     atoms: Atoms,
-    data: Arc<RwLock<ClipboardData>>,
+    selection: Arc<Selection>,
     kill: Arc<AtomicBool>,
 }
 
@@ -411,20 +439,20 @@ impl Listener {
         display: Display,
         target: Storage,
         atoms: Atoms,
-        data: Arc<RwLock<ClipboardData>>,
+        selection: Arc<Selection>,
         kill: Arc<AtomicBool>,
     ) -> Listener {
         Listener {
             display,
             target,
             atoms,
-            data,
+            selection,
             kill,
         }
     }
 
     pub fn is_valid(&mut self, target: Atom, property: Atom) -> Result<bool, Error> {
-        Ok(target.id() == read!(self.data)?.format.id() && !property.is_null())
+        Ok(target.id() == lock!(self.selection.data)?.format.id() && !property.is_null())
     }
 
     pub fn handle_request(
@@ -436,7 +464,7 @@ impl Listener {
         property: Atom,
     ) -> Result<(), Error> {
         if self.is_valid(target, property)? {
-            let data = read!(self.data)?.get();
+            let data = lock!(self.selection.data)?.get();
 
             owner.change_property(
                 property,
@@ -489,9 +517,13 @@ impl Listener {
                                 .then(|| Vec::new())
                                 .unwrap_or_else(|| bytes);
 
-                            write!(self.data)?.set(&bytes, self.atoms.formats.text.utf8_string);
+                            self.selection.set(&bytes, self.atoms.formats.text.utf8_string)?;
                         }
                     }
+                    Event::SelectionClear { time, owner, selection } => {
+                        // TODO: here we will have to have support for listening for clipboard
+                        // changes
+                    },
                     _ => {}
                 }
             }
