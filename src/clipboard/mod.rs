@@ -259,6 +259,15 @@ pub struct Clipboard {
 impl Drop for Clipboard {
     fn drop(&mut self) {
         // TODO: save the data to the clipboard manager here
+        // TODO: finish this
+
+        if self.is_owner().unwrap_or(false) {
+            let _ = self.storage.window.convert_selection(
+                self.atoms.selections.clipboard,
+                self.atoms.manager.save_targets,
+                self.storage.property
+            );
+        }
 
         self.listener.kill();
     }
@@ -391,6 +400,11 @@ impl Clipboard {
 
         let targets = atoms.into_iter().map(Target::from).collect();
         Ok(targets)
+    }
+
+    pub fn is_owner(&self) -> Result<bool, Error> {
+        self.display.get_selection_owner(self.atoms.selections.clipboard)
+            .map(|wid| wid != self.storage.window.id())
     }
 }
 
