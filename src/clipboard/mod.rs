@@ -551,6 +551,7 @@ impl Listener {
         )
     }
 
+    // TODO: this function is quite ugly and could need some cleaning
     pub fn listen(&mut self) -> Result<(), Error> {
         while !self.kill.load(Ordering::Relaxed) {
             if self.display.poll_event()? {
@@ -602,9 +603,10 @@ impl Listener {
                             self.selection.set(&bytes, self.atoms.formats.text.utf8_string)?;
                         }
                     }
-                    Event::SelectionClear { time, owner, selection } => {
-                        // TODO: here we will have to have support for listening for clipboard
-                        // changes
+                    Event::SelectionClear { selection, .. } => {
+                        if selection == self.atoms.selections.clipboard {
+                            self.selection.reset()?;
+                        }
                     },
                     _ => {}
                 }
