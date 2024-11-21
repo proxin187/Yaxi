@@ -6,6 +6,7 @@ use crate::window::*;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, Condvar};
 use std::thread::{self, JoinHandle};
+use std::time::Duration;
 
 macro_rules! lock {
     ($mutex:expr) => {
@@ -208,7 +209,7 @@ struct Storage {
     property: Atom,
 }
 
-pub struct Selection {
+struct Selection {
     data: Mutex<ClipboardData>,
     cond: Condvar,
 }
@@ -248,25 +249,46 @@ impl Selection {
     }
 }
 
+/// this represents the different handover states, Notified means we have recieved a
+/// SelectionNotify and Requested means we have recieved a SelectionRequest.
+/// the reason why we have these states is because we need to wait until we have been both notified
+/// and requested before we are sure the handover was done
+
+#[derive(PartialEq)]
+enum HandoverState {
+    Idle,
+    InProgress,
+    Notified,
+    Requested,
+}
+
+struct Handover {
+    state: Mutex<HandoverState>,
+    cond: Condvar,
+}
+
+impl Handover {
+    pub fn new() -> Handover {
+        Handover {
+            state: Mutex::new(HandoverState::Idle),
+            cond: Condvar::new(),
+        }
+    }
+}
+
 pub struct Clipboard {
     display: Display,
     storage: Storage,
     atoms: Atoms,
     selection: Arc<Selection>,
+    handover: Arc<Handover>,
     listener: ListenerHandle,
 }
 
 impl Drop for Clipboard {
     fn drop(&mut self) {
-        // TODO: save the data to the clipboard manager here
-        // TODO: finish this
-
         if self.is_owner().unwrap_or(false) {
-            let _ = self.storage.window.convert_selection(
-                self.atoms.selections.clipboard,
-                self.atoms.manager.save_targets,
-                self.storage.property
-            );
+            self.handover().expect("failed to handover to clipboard manager");
         }
 
         self.listener.kill();
@@ -296,12 +318,14 @@ impl Clipboard {
 
         let atoms = Atoms::new(&display)?;
         let selection = Arc::new(Selection::new());
+        let handover = Arc::new(Handover::new());
 
         let listener = ListenerHandle::spawn(
             display.clone(),
             storage.clone(),
             atoms.clone(),
             selection.clone(),
+            handover.clone(),
             Arc::new(AtomicBool::new(false)),
         );
 
@@ -310,8 +334,25 @@ impl Clipboard {
             storage,
             atoms,
             selection,
+            handover,
             listener,
         })
+    }
+
+    fn handover(&mut self) -> Result<(), Error> {
+        let mut state = lock!(self.handover.state)?;
+
+        self.storage.window.convert_selection(
+            self.atoms.selections.clipboard,
+            self.atoms.manager.save_targets,
+            self.storage.property
+        )?;
+
+        *state = HandoverState::InProgress;
+
+        drop(self.handover.cond.wait_timeout(state, Duration::from_millis(100)));
+
+        Ok(())
     }
 
     fn convert_selection(&self, selection: Atom, target: Atom) -> Result<Vec<u8>, Error> {
@@ -402,9 +443,10 @@ impl Clipboard {
         Ok(targets)
     }
 
+    /// this function checks whether we are currently the owner of the selection
     pub fn is_owner(&self) -> Result<bool, Error> {
         self.display.get_selection_owner(self.atoms.selections.clipboard)
-            .map(|wid| wid != self.storage.window.id())
+            .map(|wid| wid == self.storage.window.id())
     }
 }
 
@@ -419,13 +461,14 @@ impl ListenerHandle {
         target: Storage,
         atoms: Atoms,
         selection: Arc<Selection>,
+        handover: Arc<Handover>,
         kill: Arc<AtomicBool>,
     ) -> ListenerHandle {
         let clone = kill.clone();
 
         ListenerHandle {
             thread: thread::spawn(move || -> Result<(), Error> {
-                let mut listener = Listener::new(display, target, atoms, selection, clone);
+                let mut listener = Listener::new(display, target, atoms, selection, handover, clone);
 
                 listener.listen()
             }),
@@ -445,6 +488,7 @@ struct Listener {
     target: Storage,
     atoms: Atoms,
     selection: Arc<Selection>,
+    handover: Arc<Handover>,
     kill: Arc<AtomicBool>,
 }
 
@@ -454,6 +498,7 @@ impl Listener {
         target: Storage,
         atoms: Atoms,
         selection: Arc<Selection>,
+        handover: Arc<Handover>,
         kill: Arc<AtomicBool>,
     ) -> Listener {
         Listener {
@@ -461,6 +506,7 @@ impl Listener {
             target,
             atoms,
             selection,
+            handover,
             kill,
         }
     }
@@ -519,9 +565,31 @@ impl Listener {
                         let owner = self.display.window_from_id(owner)?;
 
                         self.handle_request(time, owner, selection, target, property)?;
+
+                        if selection == self.atoms.manager.manager {
+                            let mut state = lock!(self.handover.state)?;
+
+                            if *state == HandoverState::Notified {
+                                self.handover.cond.notify_all();
+                            } else if *state == HandoverState::InProgress {
+                                *state = HandoverState::Requested;
+                            }
+                        }
                     }
-                    Event::SelectionNotify { property, .. } => {
-                        if let Some((bytes, _)) = self.target.window.get_property(
+                    Event::SelectionNotify { property, selection, .. } => {
+                        if selection == self.atoms.manager.manager {
+                            let mut state = lock!(self.handover.state)?;
+
+                            match *state {
+                                HandoverState::InProgress => {
+                                    *state = HandoverState::Notified;
+                                },
+                                HandoverState::Requested => {
+                                    self.handover.cond.notify_all();
+                                },
+                                _ => {},
+                            }
+                        } else if let Some((bytes, _)) = self.target.window.get_property(
                             self.target.property,
                             Atom::ANY_PROPERTY_TYPE,
                             false,
