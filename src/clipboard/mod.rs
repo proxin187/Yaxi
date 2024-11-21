@@ -1,3 +1,5 @@
+/// working with clipboards
+
 use crate::display::error::Error;
 use crate::display::{self, *};
 use crate::proto::*;
@@ -406,14 +408,17 @@ impl Clipboard {
         self.get_string(self.atoms.formats.text.utf8_string)
     }
 
+    /// get the clipboard content as html
     pub fn get_html(&self) -> Result<Option<String>, Error> {
         self.get_string(self.atoms.formats.rich.html)
     }
 
+    /// get the clipboard content as rtf
     pub fn get_rtf(&self) -> Result<Option<String>, Error> {
         self.get_string(self.atoms.formats.rich.rtf)
     }
 
+    /// get the clipboard content as uri list
     pub fn get_uri_list(&self) -> Result<Option<Vec<String>>, Error> {
         let uris = self
             .get_string(self.atoms.formats.rich.uri_list)?
@@ -421,12 +426,14 @@ impl Clipboard {
         Ok(uris)
     }
 
+    /// get the clipboard content as text
     pub fn get_plain_text(&self) -> Result<Option<String>, Error> {
         self.get_string(self.atoms.formats.text.utf8_string)
             .or_else(|_| self.get_string(self.atoms.formats.text.plain))
             .or_else(|_| self.get_string(self.atoms.formats.text.string))
     }
 
+    /// get the available targets for the current selection
     pub fn get_targets(&self) -> Result<Vec<Target>, Error> {
         let targets =
             self.convert_selection(self.atoms.selections.clipboard, self.atoms.protocol.targets)?;
