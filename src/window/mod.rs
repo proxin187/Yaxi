@@ -231,6 +231,12 @@ pub struct Window {
     id: u32,
 }
 
+impl PartialEq for Window {
+    fn eq(&self, rhs: &Window) -> bool {
+        self.id() == rhs.id()
+    }
+}
+
 impl Window {
     pub fn new(
         stream: Stream,
