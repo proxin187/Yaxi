@@ -67,6 +67,7 @@ impl Opcode {
     pub const CIRCULATE_WINDOW: u8 = 13;
     pub const GET_GEOMETRY: u8 = 14;
     pub const INTERN_ATOM: u8 = 16;
+    pub const GET_ATOM_NAME: u8 = 17;
     pub const CHANGE_PROPERTY: u8 = 18;
     pub const DELETE_PROPERTY: u8 = 19;
     pub const GET_PROPERTY: u8 = 20;
@@ -237,6 +238,9 @@ pub enum Reply {
         screens: Vec<XineramaScreenInfo>,
     },
 
+    GetAtomName {
+        name: String,
+    },
     GetProperty {
         type_: Atom,
         value: Vec<u8>,
@@ -259,6 +263,7 @@ pub enum ReplyKind {
     GrabPointer,
     QueryExtension,
     GetSelectionOwner,
+    GetAtomName,
 
     #[cfg(feature = "xinerama")]
     XineramaIsActive,

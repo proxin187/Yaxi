@@ -508,6 +508,23 @@ impl Display {
         }
     }
 
+    /// get the name of an atom
+    pub fn get_atom_name(&self, atom: Atom) -> Result<String, Error> {
+        self.sequence.append(ReplyKind::GetAtomName)?;
+
+        self.stream.send_encode(GetAtomName {
+            opcode: Opcode::GET_ATOM_NAME,
+            pad0: 0,
+            length: 2,
+            atom: atom.id()
+        })?;
+
+        match self.replies.wait()? {
+            Reply::GetAtomName { name } => Ok(name),
+            _ => unreachable!(),
+        }
+    }
+
     /// this function will clear the atom cache, this ensures that the `intern_atom` function will
     /// always return a fresh atom
     pub fn clear_atom_cache(&self) -> Result<(), Error> {
@@ -782,6 +799,17 @@ impl EventListener {
 
                 self.replies.push(Reply::GetInputFocus(response))?;
             }
+            ReplyKind::GetAtomName => {
+                let response: GetAtomNameResponse = self.stream.recv_decode()?;
+
+                let bytes = self.stream.recv(response.name_len as usize)?;
+
+                self.replies.push(Reply::GetAtomName {
+                    name: String::from_utf8(bytes).map_err(|_| Error::Utf8)?,
+                })?;
+
+                self.stream.recv(request::pad(response.name_len as usize))?;
+            },
             ReplyKind::GetProperty => {
                 let response: GetPropertyResponse = self.stream.recv_decode()?;
 
