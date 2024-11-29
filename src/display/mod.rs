@@ -532,7 +532,7 @@ impl Display {
             opcode: Opcode::GET_ATOM_NAME,
             pad0: 0,
             length: 2,
-            atom: atom.id()
+            atom: atom.id(),
         })?;
 
         match self.replies.wait()? {
@@ -825,7 +825,7 @@ impl EventListener {
                 })?;
 
                 self.stream.recv(request::pad(response.name_len as usize))?;
-            },
+            }
             ReplyKind::GetProperty => {
                 let response: GetPropertyResponse = self.stream.recv_decode()?;
 
