@@ -1,625 +1,243 @@
-/// working with clipboards
-
-use crate::display::error::Error;
-use crate::display::{self, *};
-use crate::proto::*;
-use crate::window::*;
-
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, Condvar};
-use std::thread::{self, JoinHandle};
+use std::sync::Arc;
 use std::time::Duration;
 
-macro_rules! lock {
-    ($mutex:expr) => {
-        $mutex.lock().map_err(|_| Error::FailedToLock)
-    };
-}
+use crate::display::{self, Atom};
+use crate::proto::*;
 
-#[derive(Clone)]
-pub struct ClipboardData {
-    bytes: Option<Vec<u8>>,
-    format: Atom,
-}
+use atoms::AtomName;
+use context::Context;
+use event::EventHandler;
+use model::{ClipboardData, HandoverStatus};
+use {atoms::Atoms, error::Error};
 
-impl ClipboardData {
-    pub fn new() -> ClipboardData {
-        ClipboardData {
-            bytes: None,
-            format: Atom::new(0),
-        }
-    }
-
-    #[inline]
-    fn reset(&mut self) {
-        self.bytes = None
-    }
-
-    #[inline]
-    fn get(&self) -> Vec<u8> {
-        self.bytes.clone().unwrap_or_default()
-    }
-
-    #[inline]
-    fn set(&mut self, bytes: &[u8], format: Atom) {
-        self.bytes.replace(bytes.to_vec());
-
-        self.format = format;
-    }
-}
-
-#[derive(Clone)]
-struct Atoms {
-    selections: SelectionAtoms,
-    manager: ManagerAtoms,
-    protocol: ProtocolAtoms,
-    formats: FormatAtoms,
-}
-
-#[derive(Clone)]
-struct SelectionAtoms {
-    clipboard: Atom,
-    primary: Atom,
-    secondary: Atom,
-}
-
-#[derive(Clone)]
-struct ManagerAtoms {
-    manager: Atom,
-    save_targets: Atom,
-}
-
-#[derive(Clone)]
-struct ProtocolAtoms {
-    targets: Atom,
-    atom: Atom,
-    incremental: Atom,
-}
-
-#[derive(Clone)]
-struct FormatAtoms {
-    text: TextFormatAtoms,
-    rich: RichFormatAtoms,
-}
-
-#[derive(Clone)]
-struct TextFormatAtoms {
-    utf8_string: Atom,
-    utf8_mime: Atom,
-    utf8_mime_alt: Atom,
-    string: Atom,
-    text: Atom,
-    plain: Atom,
-}
-
-#[derive(Clone)]
-struct RichFormatAtoms {
-    html: Atom,
-    rtf: Atom,
-    png: Atom,
-    jpeg: Atom,
-    tiff: Atom,
-    pdf: Atom,
-    uri_list: Atom,
-}
-
-impl Atoms {
-    pub fn new(display: &Display) -> Result<Atoms, Error> {
-        Ok(Atoms {
-            selections: SelectionAtoms::new(display)?,
-            manager: ManagerAtoms::new(display)?,
-            protocol: ProtocolAtoms::new(display)?,
-            formats: FormatAtoms::new(display)?,
-        })
-    }
-}
-
-impl SelectionAtoms {
-    fn new(display: &Display) -> Result<Self, Error> {
-        Ok(Self {
-            clipboard: display.intern_atom("CLIPBOARD", false)?,
-            primary: display.intern_atom("PRIMARY", false)?,
-            secondary: display.intern_atom("SECONDARY", false)?,
-        })
-    }
-}
-
-impl ManagerAtoms {
-    fn new(display: &Display) -> Result<Self, Error> {
-        Ok(Self {
-            manager: display.intern_atom("CLIPBOARD_MANAGER", false)?,
-            save_targets: display.intern_atom("SAVE_TARGETS", false)?,
-        })
-    }
-}
-
-impl ProtocolAtoms {
-    fn new(display: &Display) -> Result<Self, Error> {
-        Ok(Self {
-            targets: display.intern_atom("TARGETS", false)?,
-            atom: display.intern_atom("ATOM", false)?,
-            incremental: display.intern_atom("INCR", false)?,
-        })
-    }
-}
-
-impl FormatAtoms {
-    fn new(display: &Display) -> Result<Self, Error> {
-        Ok(Self {
-            text: TextFormatAtoms::new(display)?,
-            rich: RichFormatAtoms::new(display)?,
-        })
-    }
-}
-
-impl TextFormatAtoms {
-    fn new(display: &Display) -> Result<Self, Error> {
-        Ok(Self {
-            utf8_string: display.intern_atom("UTF8_STRING", false)?,
-            utf8_mime: display.intern_atom("text/plain;charset=utf-8", false)?,
-            utf8_mime_alt: display.intern_atom("text/plain;charset=utf8", false)?,
-            string: display.intern_atom("STRING", false)?,
-            text: display.intern_atom("TEXT", false)?,
-            plain: display.intern_atom("text/plain", false)?,
-        })
-    }
-}
-
-impl RichFormatAtoms {
-    fn new(display: &Display) -> Result<Self, Error> {
-        Ok(Self {
-            html: display.intern_atom("text/html", false)?,
-            rtf: display.intern_atom("text/rtf", false)?,
-            png: display.intern_atom("image/png", false)?,
-            jpeg: display.intern_atom("image/jpeg", false)?,
-            tiff: display.intern_atom("image/tiff", false)?,
-            pdf: display.intern_atom("application/pdf", false)?,
-            uri_list: display.intern_atom("text/uri-list", false)?,
-        })
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct Target {
-    pub atom: Atom,
-    pub name: Option<String>,
-}
-
-impl From<Atom> for Target {
-    fn from(atom: Atom) -> Target {
-        Target { atom, name: None }
-    }
-}
-
-impl Target {
-    pub fn new(atom: Atom, name: Option<String>) -> Target {
-        Target { atom, name }
-    }
-
-    pub fn atom(&self) -> Atom {
-        self.atom
-    }
-
-    pub fn name(&self) -> Option<&str> {
-        self.name.as_deref()
-    }
-}
-
-#[derive(Clone)]
-struct Storage {
-    window: Window,
-    property: Atom,
-}
-
-struct Selection {
-    data: Mutex<ClipboardData>,
-    cond: Condvar,
-}
-
-impl Selection {
-    pub fn new() -> Selection {
-        Selection {
-            data: Mutex::new(ClipboardData::new()),
-            cond: Condvar::new(),
-        }
-    }
-
-    pub fn reset(&self) -> Result<(), Error> {
-        lock!(self.data)?.reset();
-
-        Ok(())
-    }
-
-    pub fn set(&self, bytes: &[u8], format: Atom) -> Result<(), Error> {
-        lock!(self.data)?.set(bytes, format);
-
-        self.cond.notify_all();
-
-        Ok(())
-    }
-
-    pub fn get(&self) -> Result<Vec<u8>, Error> {
-        let mut guard = self.data.lock().map_err(|_| Error::FailedToLock)?;
-
-        loop {
-            if let Some(bytes) = guard.bytes.clone() {
-                return Ok(bytes);
-            } else {
-                guard = self.cond.wait(guard).map_err(|_| Error::FailedToLock)?;
-            }
-        }
-    }
-}
-
-/// this represents the different handover states, Notified means we have recieved a
-/// SelectionNotify and Requested means we have recieved a SelectionRequest.
-/// the reason why we have these states is because we need to wait until we have been both notified
-/// and requested before we are sure the handover was done
-
-#[derive(PartialEq)]
-enum HandoverState {
-    Idle,
-    InProgress,
-    Notified,
-    Requested,
-}
-
-struct Handover {
-    state: Mutex<HandoverState>,
-    cond: Condvar,
-}
-
-impl Handover {
-    pub fn new() -> Handover {
-        Handover {
-            state: Mutex::new(HandoverState::Idle),
-            cond: Condvar::new(),
-        }
-    }
-}
+mod atoms;
+mod context;
+pub mod error;
+mod event;
+mod model;
 
 pub struct Clipboard {
-    display: Display,
-    storage: Storage,
+    context: Context,
     atoms: Atoms,
-    selection: Arc<Selection>,
-    handover: Arc<Handover>,
-    listener: ListenerHandle,
+    handler: Arc<EventHandler>,
+}
+
+impl Clipboard {
+    pub fn new(display: Option<&str>) -> Result<Clipboard, Error> {
+        let display = display::open(display)?;
+        let context = Context::from_display(&display)?;
+        let atoms = Atoms::new(&display)?;
+        let handler = Arc::new(EventHandler::new(context.clone()));
+
+        handler.start()?;
+
+        Ok(Clipboard {
+            context,
+            atoms,
+            handler,
+        })
+    }
+
+    pub fn clear(&self) -> Result<(), Error> {
+        self.context
+            .set_selection_owner(self.atoms.selections.clipboard)?;
+        self.context.delete_property(self.context.handle.marker())?;
+        self.handler.clear(self.atoms.selections.clipboard)?;
+        Ok(())
+    }
+
+    fn read(&self, target: Atom, selection: Atom) -> Result<Option<ClipboardData>, Error> {
+        // 1. try to read from current owner
+        if let Some(data) = self.handler.read(selection, target)? {
+            return Ok(Some(data));
+        }
+
+        // 2. if read failed, try to get from clipboard manager
+        let cm_owner = self
+            .context
+            .get_selection_owner_id(self.atoms.selections.clipboard_manager)?;
+        if cm_owner == 0 {
+            return Ok(None);
+        }
+
+        // 3. request clipboard manager to convert data
+        self.context.convert_selection(
+            self.atoms.selections.clipboard_manager,
+            target,
+            self.atoms.protocol.targets,
+        )?;
+
+        // 4. wait data
+        self.handler.wait_data(target, Duration::from_secs(5))
+    }
+
+    fn write(&self, data: Vec<ClipboardData>, selection: Atom) -> Result<(), Error> {
+        // 1. check service status
+        if self.handler.is_stopped() {
+            return Err(Error::ServiceStopped);
+        }
+
+        // 2. set owner
+        self.context.set_selection_owner(selection)?;
+
+        // 3. prepare targets
+        let mut targets = vec![
+            self.atoms.protocol.targets,
+            self.atoms.protocol.timestamp,
+            self.atoms.protocol.multiple,
+        ];
+
+        // 4. set data and targets
+        let data_clone = data.clone();
+        for item in &data_clone {
+            targets.push(item.format);
+        }
+
+        self.handler.set_targets(selection, targets)?;
+        for item in data_clone {
+            self.handler.set(selection, item.format, item)?;
+        }
+
+        Ok(())
+    }
+}
+
+impl Clipboard {
+    pub fn set_text(&self, text: &str) -> Result<(), Error> {
+        let bytes = text.as_bytes();
+        let data = vec![
+            ClipboardData::from_bytes(bytes.to_vec(), self.atoms.formats.utf8_string),
+            ClipboardData::from_bytes(bytes.to_vec(), self.atoms.formats.utf8_mime),
+            ClipboardData::from_bytes(bytes.to_vec(), self.atoms.formats.utf8_mime_alt),
+        ];
+
+        self.write(data, self.atoms.selections.clipboard)?;
+        Ok(())
+    }
+
+    pub fn get_text(&self) -> Result<Option<String>, Error> {
+        let formats = [
+            self.atoms.formats.utf8_string,
+            self.atoms.formats.utf8_mime,
+            self.atoms.formats.utf8_mime_alt,
+        ];
+
+        for format in &formats {
+            match self.read(*format, self.atoms.selections.clipboard)? {
+                Some(data) => {
+                    let bytes = data.bytes().to_owned();
+                    let text = String::from_utf8(bytes)?;
+                    return Ok(Some(text));
+                }
+                None => continue,
+            }
+        }
+
+        Ok(None)
+    }
+
+    pub fn get_html(&self) -> Result<Option<(String, Option<String>)>, Error> {
+        if let Some(data) = self.read(self.atoms.formats.html, self.atoms.selections.clipboard)? {
+            let bytes = data.bytes().to_owned();
+            let html = String::from_utf8(bytes)?;
+            let alt = self.get_text().ok().flatten();
+            return Ok(Some((html, alt)));
+        }
+
+        Ok(None)
+    }
+
+    pub fn set_html(&self, html: &str, alt: Option<&str>) -> Result<(), Error> {
+        let mut data = vec![ClipboardData::from_bytes(
+            html.as_bytes().to_vec(),
+            self.atoms.formats.html,
+        )];
+
+        if let Some(alt) = alt {
+            data.push(ClipboardData::from_bytes(
+                alt.as_bytes().to_vec(),
+                self.atoms.formats.utf8_string,
+            ));
+        }
+
+        self.write(data, self.atoms.selections.clipboard)?;
+        Ok(())
+    }
+
+    pub fn get_targets(&self) -> Result<Vec<Atom>, Error> {
+        let mut targets = vec![];
+
+        if let Ok(Some(data)) =
+            self.read(self.atoms.protocol.targets, self.atoms.selections.clipboard)
+        {
+            let bytes = data.bytes();
+            for i in (0..bytes.len()).step_by(4) {
+                let ne_bytes = (&bytes[i..i + 4]).try_into().unwrap();
+                let target = Atom::from_ne_bytes(ne_bytes);
+                targets.push(target);
+            }
+        }
+
+        Ok(targets)
+    }
+}
+
+impl Clipboard {
+    fn try_handover_clipboard(&self) -> Result<Option<HandoverStatus>, Error> {
+        let selection = self.context.atoms.selections.clipboard;
+
+        log::info!(
+            "Handover {} to CLIPBOARD_MANAGER, window: {}",
+            selection.display_name(),
+            self.context.handle.window_id()
+        );
+
+        // 1. check owner
+        if !self.context.is_owner(selection)? {
+            return Ok(None);
+        }
+
+        // 2. check data is not empty
+        if self.handler.is_empty(selection)? {
+            return Ok(None);
+        }
+
+        // 3. make sure the data is not in progress
+        std::thread::sleep(Duration::from_millis(50));
+
+        // 4. handover
+        self.context.convert_selection_to_self(
+            self.context.atoms.selections.clipboard_manager,
+            self.context.atoms.protocol.save_targets,
+        )?;
+
+        // 5. set in progress
+        self.handler.set_in_progress();
+
+        // 6. wait handover changed
+        match self.handler.wait_handover_changed() {
+            Ok(state) => {
+                if state.is_completed() {
+                    Ok(Some(state))
+                } else {
+                    Ok(None)
+                }
+            }
+            Err(e) => Err(e),
+        }
+    }
 }
 
 impl Drop for Clipboard {
     fn drop(&mut self) {
-        if self.is_owner().unwrap_or(false) {
-            self.handover().expect("failed to handover to clipboard manager");
-        }
-
-        self.listener.kill();
-    }
-}
-
-impl Clipboard {
-    /// create a new clipboard helper instance
-    pub fn new(display: Option<&str>) -> Result<Clipboard, Error> {
-        let display = display::open(display)?;
-        let root = display.default_root_window()?;
-
-        let storage = Storage {
-            window: root.create_window(WindowArguments {
-                depth: root.depth(),
-                x: 0,
-                y: 0,
-                width: 1,
-                height: 1,
-                class: WindowClass::InputOutput,
-                border_width: 0,
-                visual: root.visual(),
-                values: ValuesBuilder::new(vec![]),
-            })?,
-            property: display.intern_atom("SKIBIDI_TOILET", false)?,
-        };
-
-        let atoms = Atoms::new(&display)?;
-        let selection = Arc::new(Selection::new());
-        let handover = Arc::new(Handover::new());
-
-        let listener = ListenerHandle::spawn(
-            display.clone(),
-            storage.clone(),
-            atoms.clone(),
-            selection.clone(),
-            handover.clone(),
-            Arc::new(AtomicBool::new(false)),
-        );
-
-        Ok(Clipboard {
-            display,
-            storage,
-            atoms,
-            selection,
-            handover,
-            listener,
-        })
-    }
-
-    fn handover(&mut self) -> Result<(), Error> {
-        let mut state = lock!(self.handover.state)?;
-
-        self.storage.window.convert_selection(
-            self.atoms.selections.clipboard,
-            self.atoms.manager.save_targets,
-            self.storage.property
-        )?;
-
-        *state = HandoverState::InProgress;
-
-        drop(self.handover.cond.wait_timeout(state, Duration::from_millis(100)));
-
-        Ok(())
-    }
-
-    fn convert_selection(&self, selection: Atom, target: Atom) -> Result<Vec<u8>, Error> {
-        self.selection.reset()?;
-
-        self.storage
-            .window
-            .convert_selection(selection, target, self.storage.property)?;
-
-        self.selection.get()
-    }
-
-    fn get_bytes(&self, target: Atom) -> Result<Option<Vec<u8>>, Error> {
-        let owner = self
-            .display
-            .get_selection_owner(self.atoms.selections.clipboard)?;
-
-        let window = self.display.window_from_id(owner)?;
-        let selection = if window.id() != self.storage.window.id() {
-            self.convert_selection(self.atoms.selections.clipboard, target)?
-        } else {
-            lock!(self.selection.data).map(|data| data.get())?
-        };
-
-        Ok(Some(selection))
-    }
-
-    fn get_string(&self, target: Atom) -> Result<Option<String>, Error> {
-        let bytes = self.get_bytes(target)?;
-        let string = bytes
-            .map(|bytes| String::from_utf8(bytes).map_err(|e| Error::Other { error: e.into() }))
-            .transpose()?;
-        Ok(string)
-    }
-}
-
-impl Clipboard {
-    /// set text into the clipboard
-    pub fn set_text(&self, text: &str) -> Result<(), Error> {
-        self.storage
-            .window
-            .set_selection_owner(self.atoms.selections.clipboard)?;
-
-        self.selection.set(text.as_bytes(), self.atoms.formats.text.utf8_string)
-    }
-
-    // TODO: this deadlocks if the owner terminates during the call
-
-    /// get text from the clipboard
-    pub fn get_text(&self) -> Result<Option<String>, Error> {
-        self.get_string(self.atoms.formats.text.utf8_string)
-    }
-
-    /// get the clipboard content as html
-    pub fn get_html(&self) -> Result<Option<String>, Error> {
-        self.get_string(self.atoms.formats.rich.html)
-    }
-
-    /// get the clipboard content as rtf
-    pub fn get_rtf(&self) -> Result<Option<String>, Error> {
-        self.get_string(self.atoms.formats.rich.rtf)
-    }
-
-    /// get the clipboard content as uri list
-    pub fn get_uri_list(&self) -> Result<Option<Vec<String>>, Error> {
-        let uris = self
-            .get_string(self.atoms.formats.rich.uri_list)?
-            .map(|string| string.lines().map(|line| line.to_string()).collect());
-        Ok(uris)
-    }
-
-    /// get the clipboard content as text
-    pub fn get_plain_text(&self) -> Result<Option<String>, Error> {
-        self.get_string(self.atoms.formats.text.utf8_string)
-            .or_else(|_| self.get_string(self.atoms.formats.text.plain))
-            .or_else(|_| self.get_string(self.atoms.formats.text.string))
-    }
-
-    /// get the available targets for the current selection
-    pub fn get_targets(&self) -> Result<Vec<Target>, Error> {
-        let targets =
-            self.convert_selection(self.atoms.selections.clipboard, self.atoms.protocol.targets)?;
-        let mut atoms = vec![];
-
-        for i in 0..targets.len() / 4 {
-            let bytes = &targets[i * 4..(i + 1) * 4];
-            if let Ok(atom) = Atom::try_from(bytes) {
-                atoms.push(atom);
+        log::trace!("Clipboard dropping, try handover clipboard");
+        match self.try_handover_clipboard() {
+            Ok(state) => {
+                log::trace!("Handover finished, state: {:?}", state);
+            }
+            Err(e) => {
+                log::error!("Handover failed: {}", e);
             }
         }
-
-        let targets = atoms.into_iter().map(Target::from).collect();
-        Ok(targets)
-    }
-
-    /// this function checks whether we are currently the owner of the selection
-    pub fn is_owner(&self) -> Result<bool, Error> {
-        self.display.get_selection_owner(self.atoms.selections.clipboard)
-            .map(|wid| wid == self.storage.window.id())
-    }
-}
-
-struct ListenerHandle {
-    thread: JoinHandle<Result<(), Error>>,
-    kill: Arc<AtomicBool>,
-}
-
-impl ListenerHandle {
-    pub fn spawn(
-        display: Display,
-        target: Storage,
-        atoms: Atoms,
-        selection: Arc<Selection>,
-        handover: Arc<Handover>,
-        kill: Arc<AtomicBool>,
-    ) -> ListenerHandle {
-        let clone = kill.clone();
-
-        ListenerHandle {
-            thread: thread::spawn(move || -> Result<(), Error> {
-                let mut listener = Listener::new(display, target, atoms, selection, handover, clone);
-
-                listener.listen()
-            }),
-            kill,
-        }
-    }
-
-    pub fn kill(&mut self) {
-        self.kill.store(true, Ordering::Relaxed);
-
-        while !self.thread.is_finished() {}
-    }
-}
-
-struct Listener {
-    display: Display,
-    target: Storage,
-    atoms: Atoms,
-    selection: Arc<Selection>,
-    handover: Arc<Handover>,
-    kill: Arc<AtomicBool>,
-}
-
-impl Listener {
-    pub fn new(
-        display: Display,
-        target: Storage,
-        atoms: Atoms,
-        selection: Arc<Selection>,
-        handover: Arc<Handover>,
-        kill: Arc<AtomicBool>,
-    ) -> Listener {
-        Listener {
-            display,
-            target,
-            atoms,
-            selection,
-            handover,
-            kill,
-        }
-    }
-
-    pub fn is_valid(&mut self, target: Atom, property: Atom) -> Result<bool, Error> {
-        Ok(target.id() == lock!(self.selection.data)?.format.id() && !property.is_null())
-    }
-
-    pub fn handle_request(
-        &mut self,
-        time: u32,
-        owner: Window,
-        selection: Atom,
-        target: Atom,
-        property: Atom,
-    ) -> Result<(), Error> {
-        if self.is_valid(target, property)? {
-            let data = lock!(self.selection.data)?.get();
-
-            owner.change_property(
-                property,
-                target,
-                PropFormat::Format8,
-                PropMode::Replace,
-                &data,
-            )?;
-        }
-
-        owner.send_event(
-            Event::SelectionNotify {
-                time,
-                requestor: owner.id(),
-                selection,
-                target,
-                property: self
-                    .is_valid(target, property)?
-                    .then(|| property)
-                    .unwrap_or(Atom::new(0)),
-            },
-            vec![],
-            true,
-        )
-    }
-
-    // TODO: this function is quite ugly and could need some cleaning
-    pub fn listen(&mut self) -> Result<(), Error> {
-        while !self.kill.load(Ordering::Relaxed) {
-            if self.display.poll_event()? {
-                match self.display.next_event()? {
-                    Event::SelectionRequest {
-                        time,
-                        owner,
-                        selection,
-                        target,
-                        property,
-                    } => {
-                        let owner = self.display.window_from_id(owner)?;
-
-                        self.handle_request(time, owner, selection, target, property)?;
-
-                        if selection == self.atoms.manager.manager {
-                            let mut state = lock!(self.handover.state)?;
-
-                            if *state == HandoverState::Notified {
-                                self.handover.cond.notify_all();
-                            } else if *state == HandoverState::InProgress {
-                                *state = HandoverState::Requested;
-                            }
-                        }
-                    }
-                    Event::SelectionNotify { property, selection, .. } => {
-                        if selection == self.atoms.manager.manager {
-                            let mut state = lock!(self.handover.state)?;
-
-                            match *state {
-                                HandoverState::InProgress => {
-                                    *state = HandoverState::Notified;
-                                },
-                                HandoverState::Requested => {
-                                    self.handover.cond.notify_all();
-                                },
-                                _ => {},
-                            }
-                        } else if let Some((bytes, _)) = self.target.window.get_property(
-                            self.target.property,
-                            Atom::ANY_PROPERTY_TYPE,
-                            false,
-                        )? {
-                            let bytes = property
-                                .is_null()
-                                .then(|| Vec::new())
-                                .unwrap_or_else(|| bytes);
-
-                            self.selection.set(&bytes, self.atoms.formats.text.utf8_string)?;
-                        }
-                    }
-                    Event::SelectionClear { selection, .. } => {
-                        if selection == self.atoms.selections.clipboard {
-                            self.selection.reset()?;
-                        }
-                    },
-                    _ => {}
-                }
-            }
-        }
-
-        Ok(())
     }
 }

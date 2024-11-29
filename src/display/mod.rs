@@ -177,6 +177,16 @@ impl Atom {
     pub fn is_null(&self) -> bool {
         self.id == 0
     }
+
+    /// get ne bytes of the atom
+    pub fn to_ne_bytes(&self) -> [u8; 4] {
+        self.id.to_ne_bytes()
+    }
+
+    /// get atom from ne bytes
+    pub fn from_ne_bytes(bytes: [u8; 4]) -> Atom {
+        Atom::new(u32::from_ne_bytes(bytes))
+    }
 }
 
 impl TryFrom<&[u8]> for Atom {
@@ -191,6 +201,12 @@ impl TryFrom<&[u8]> for Atom {
             }
             _ => Err(Error::InvalidAtom),
         }
+    }
+}
+
+impl std::fmt::Display for Atom {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "Atom({})", self.id)
     }
 }
 
@@ -516,7 +532,7 @@ impl Display {
             opcode: Opcode::GET_ATOM_NAME,
             pad0: 0,
             length: 2,
-            atom: atom.id()
+            atom: atom.id(),
         })?;
 
         match self.replies.wait()? {
@@ -809,7 +825,7 @@ impl EventListener {
                 })?;
 
                 self.stream.recv(request::pad(response.name_len as usize))?;
-            },
+            }
             ReplyKind::GetProperty => {
                 let response: GetPropertyResponse = self.stream.recv_decode()?;
 
