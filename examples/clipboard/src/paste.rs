@@ -1,5 +1,6 @@
 use yaxi::clipboard::Clipboard;
 
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let clipboard = Clipboard::new(None)?;
 

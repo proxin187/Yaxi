@@ -12,7 +12,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     for selection in selections {
         let wid = display.get_selection_owner(selection)?;
 
-        println!("[owner] wid: {}", wid);
+        println!("[owner] wid: {:?}", wid);
     }
 
     Ok(())
