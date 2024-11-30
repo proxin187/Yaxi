@@ -549,7 +549,7 @@ impl Display {
 
     /// get the owner of a selection, (this function returns the window id, use
     /// display::window_from_id to get the structure)
-    pub fn get_selection_owner(&self, selection: Atom) -> Result<u32, Error> {
+    pub fn get_selection_owner(&self, selection: Atom) -> Result<Option<u32>, Error> {
         self.sequence.append(ReplyKind::GetSelectionOwner)?;
 
         self.stream.send_encode(GetSelectionOwner {
@@ -560,7 +560,7 @@ impl Display {
         })?;
 
         match self.replies.wait()? {
-            Reply::GetSelectionOwner(response) => Ok(response.owner),
+            Reply::GetSelectionOwner(response) => Ok((response.owner != 0).then(|| response.owner)),
             _ => unreachable!(),
         }
     }

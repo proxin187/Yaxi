@@ -33,6 +33,7 @@ pub(super) struct Cache {
 impl Cache {
     pub(super) fn new(atoms: Atoms) -> Self {
         let data = RwLock::default();
+
         Self { atoms, data }
     }
 
@@ -42,19 +43,24 @@ impl Cache {
         target: Atom,
     ) -> Result<Option<ClipboardData>, Error> {
         let guard = self.data.read().map_err(|e| Error::RwLock(e.to_string()))?;
+
         let data = guard
             .get(&(selection, target))
             .map(|entry| entry.data.clone());
+
         Ok(data)
     }
 
     pub(super) fn get_all(&self, selection: Atom) -> Result<Option<Vec<ClipboardData>>, Error> {
         let guard = self.data.read().map_err(|e| Error::RwLock(e.to_string()))?;
+
         let mut data = guard
             .iter()
             .map(|(_, entry)| entry.data.clone())
             .collect::<Vec<_>>();
+
         data.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
+
         Ok(Some(data))
     }
 
@@ -68,7 +74,9 @@ impl Cache {
             .data
             .write()
             .map_err(|e| Error::RwLock(e.to_string()))?;
+
         guard.insert((selection, target), CacheEntry { data });
+
         Ok(())
     }
 
@@ -77,9 +85,11 @@ impl Cache {
             .data
             .write()
             .map_err(|e| Error::RwLock(e.to_string()))?;
+
         for entry in data {
             guard.insert((selection, entry.format), CacheEntry { data: entry });
         }
+
         Ok(())
     }
 
@@ -88,7 +98,9 @@ impl Cache {
             .data
             .write()
             .map_err(|e| Error::RwLock(e.to_string()))?;
+
         guard.remove(&(selection, target));
+
         Ok(())
     }
 
@@ -97,7 +109,9 @@ impl Cache {
             .data
             .write()
             .map_err(|e| Error::RwLock(e.to_string()))?;
+
         guard.retain(|k, _| k.0 != selection);
+
         Ok(())
     }
 
@@ -106,7 +120,9 @@ impl Cache {
             .data
             .write()
             .map_err(|e| Error::RwLock(e.to_string()))?;
+
         guard.clear();
+
         Ok(())
     }
 
@@ -120,6 +136,7 @@ impl Cache {
 impl Cache {
     pub(super) fn get_targets(&self, selection: Atom) -> Result<Vec<Atom>, Error> {
         let guard = self.data.read().map_err(|e| Error::RwLock(e.to_string()))?;
+
         let mut targets = guard
             .iter()
             .filter(|(key, _)| key.0 == selection && !self.atoms.is_side_effect_target(key.1))

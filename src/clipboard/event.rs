@@ -30,6 +30,8 @@ pub(super) struct EventLoop {
 
 impl EventLoop {
     pub(super) fn start(&self, display: Display) -> Result<(), Error> {
+        // TODO: dont use unwrap here
+
         if self.handle.lock().unwrap().is_some() {
             return Err(Error::EventLoopError("Event loop already running".into()));
         }
@@ -37,7 +39,6 @@ impl EventLoop {
         let events = self.events.clone();
         let condvar = self.condvar.clone();
         let killed = self.killed.clone();
-        let mut display = display;
 
         let handle = thread::spawn(move || {
             while !killed.load(Ordering::Relaxed) {
@@ -257,62 +258,65 @@ impl EventHandler {
         selection: Atom,
         target: Atom,
     ) -> Result<Option<ClipboardData>, Error> {
-        let owner = self.state.context.get_selection_owner_id(selection)?;
-        if owner == 0 {
-            return Ok(None);
-        }
-
-        if owner == self.state.context.handle.window_id() {
-            // Check cache
-            if let Some(data) = self.state.cache.get(selection, target)? {
-                return Ok(Some(data));
+        if let Some(owner) = self.state.context.get_selection_owner_id(selection)? {
+            if owner == self.state.context.handle.window_id() {
+                // Check cache
+                if let Some(data) = self.state.cache.get(selection, target)? {
+                    return Ok(Some(data));
+                }
             }
-        }
 
-        // Create transfer state
-        let (_state, sync) = {
+            // Create transfer state
+            let (_state, sync) = {
+                let mut transfers = self.state.transfers.lock().unwrap();
+                let entry = transfers.entry((selection, target)).or_insert_with(|| {
+                    (
+                        TransferState::empty(target),
+                        Arc::new((Mutex::new(false), Condvar::new())),
+                    )
+                });
+                (entry.0.clone(), entry.1.clone())
+            };
+
+            // Start transfer
+            self.state
+                .context
+                .convert_selection_to_self(selection, target)?;
+
+            // TODO: in all of these waiting loops we should maybe consider Condvar with
+            // wait_timeout
+
+            // Wait for completion
+            let (lock, cvar) = &*sync;
+            let mut completed = lock.lock().unwrap();
+            let timeout = Instant::now() + TRANSFER_TIMEOUT;
+
+            while !*completed {
+                let now = Instant::now();
+                if now >= timeout {
+                    return Err(Error::Timeout);
+                }
+                let duration = timeout - now;
+                let (new_completed, timeout_result) = cvar.wait_timeout(completed, duration).unwrap();
+                completed = new_completed;
+
+                if timeout_result.timed_out() {
+                    return Err(Error::Timeout);
+                }
+            }
+
+            // Get data from cache
             let mut transfers = self.state.transfers.lock().unwrap();
-            let entry = transfers.entry((selection, target)).or_insert_with(|| {
-                (
-                    TransferState::empty(target),
-                    Arc::new((Mutex::new(false), Condvar::new())),
-                )
-            });
-            (entry.0.clone(), entry.1.clone())
-        };
 
-        // Start transfer
-        self.state
-            .context
-            .convert_selection_to_self(selection, target)?;
-
-        // Wait for completion
-        let (lock, cvar) = &*sync;
-        let mut completed = lock.lock().unwrap();
-        let timeout = Instant::now() + TRANSFER_TIMEOUT;
-
-        while !*completed {
-            let now = Instant::now();
-            if now >= timeout {
-                return Err(Error::Timeout);
-            }
-            let duration = timeout - now;
-            let (new_completed, timeout_result) = cvar.wait_timeout(completed, duration).unwrap();
-            completed = new_completed;
-
-            if timeout_result.timed_out() {
-                return Err(Error::Timeout);
-            }
-        }
-
-        // Get data from cache
-        let mut transfers = self.state.transfers.lock().unwrap();
-        if let Some((state, _)) = transfers.remove(&(selection, target)) {
-            if state.completed {
-                let data = ClipboardData::new(state.data, state.format, 0);
-                // Update cache
-                self.state.cache.set(selection, target, data.clone())?;
-                Ok(Some(data))
+            if let Some((state, _)) = transfers.remove(&(selection, target)) {
+                if state.completed {
+                    let data = ClipboardData::new(state.data, state.format, 0);
+                    // Update cache
+                    self.state.cache.set(selection, target, data.clone())?;
+                    Ok(Some(data))
+                } else {
+                    Ok(None)
+                }
             } else {
                 Ok(None)
             }
@@ -326,7 +330,9 @@ impl EventHandler {
             .iter()
             .flat_map(|&t| t.to_ne_bytes().to_vec())
             .collect::<Vec<_>>();
+
         let data = ClipboardData::new(bytes, self.state.atoms.protocol.targets, 0);
+
         self.state
             .cache
             .set(selection, self.state.atoms.protocol.targets, data)
@@ -403,6 +409,7 @@ impl EventHandler {
 
         // get data from cache
         let mut transfers = transfers.lock().unwrap();
+
         if let Some((state, _)) = transfers.remove(&(selection, target)) {
             if state.completed {
                 Ok(Some(ClipboardData::new(state.data, target, 0)))
@@ -600,6 +607,7 @@ impl EventHandler {
                 target,
                 time,
             )?;
+
             success = true;
         } else {
             success = false;

@@ -31,12 +31,7 @@ impl Context {
 
     pub(super) fn is_owner(&self, selection: Atom) -> Result<bool, Error> {
         let owner = self.display.get_selection_owner(selection)?;
-        Ok(owner == self.handle.window_id())
-    }
-
-    pub(super) fn is_owner_of(&self, selection: Atom) -> Result<bool, Error> {
-        let owner = self.display.get_selection_owner(selection)?;
-        Ok(owner == self.handle.window_id())
+        Ok(owner == Some(self.handle.window_id()))
     }
 
     pub(super) fn set_selection_owner(&self, selection: Atom) -> Result<(), Error> {
@@ -44,13 +39,15 @@ impl Context {
         Ok(())
     }
 
-    pub(super) fn get_selection_owner_id(&self, selection: Atom) -> Result<u32, Error> {
+    pub(super) fn get_selection_owner_id(&self, selection: Atom) -> Result<Option<u32>, Error> {
         Ok(self.display.get_selection_owner(selection)?)
     }
 
-    pub(super) fn get_selection_owner(&self, selection: Atom) -> Result<Window, Error> {
-        let owner = self.display.get_selection_owner(selection)?;
-        Ok(self.display.window_from_id(owner)?)
+    pub(super) fn get_selection_owner(&self, selection: Atom) -> Result<Option<Window>, Error> {
+        match self.display.get_selection_owner(selection)? {
+            Some(owner) => Ok(Some(self.display.window_from_id(owner)?)),
+            None => Ok(None),
+        }
     }
 
     pub(super) fn window_from_id(&self, id: u32) -> Result<Window, Error> {
@@ -59,6 +56,7 @@ impl Context {
 
     pub(super) fn delete_property(&self, property: Atom) -> Result<(), Error> {
         self.handle.window().delete_property(property)?;
+
         Ok(())
     }
 

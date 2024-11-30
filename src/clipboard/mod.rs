@@ -41,8 +41,15 @@ impl Clipboard {
     pub fn clear(&self) -> Result<(), Error> {
         self.context
             .set_selection_owner(self.atoms.selections.clipboard)?;
+
         self.context.delete_property(self.context.handle.marker())?;
+
+        // TODO: this should clear the clipboard targets but it doesnt
         self.handler.clear(self.atoms.selections.clipboard)?;
+
+        // we need to have this here because self.handler.clear doesnt work
+        self.handler.set_targets(self.atoms.selections.clipboard, vec![])?;
+
         Ok(())
     }
 
@@ -53,10 +60,7 @@ impl Clipboard {
         }
 
         // 2. if read failed, try to get from clipboard manager
-        let cm_owner = self
-            .context
-            .get_selection_owner_id(self.atoms.selections.clipboard_manager)?;
-        if cm_owner == 0 {
+        if self.context.get_selection_owner_id(self.atoms.selections.clipboard_manager)?.is_none() {
             return Ok(None);
         }
 
