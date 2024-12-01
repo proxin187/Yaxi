@@ -32,19 +32,18 @@ mod tests {
     }
 
     fn test_clipboard_clear() {
-        // TODO: clear fails if we are the owners ourself
-        // it seems like we are still the owner after test_clipboard_clear has exited
-
         let clipboard = Clipboard::new(None).unwrap();
 
         let result = clipboard.get_targets();
+        println!("targets: {:?}", result);
         assert!(result.is_ok());
 
         let result = clipboard.clear();
+        println!("cleared");
         assert!(result.is_ok());
 
         let result = clipboard.get_targets();
-
+        println!("targets: {:?}", result);
         assert!(result.is_ok());
 
         assert_eq!(0, result.unwrap().len());
@@ -88,14 +87,25 @@ mod tests {
 
     #[test]
     fn test_all() {
+        println!("read html");
         test_clipboard_read_html();
+
+        println!("read text");
         test_clipboard_read_text();
 
+        // TODO: the reason why write html, write text and text consistency use a long time is
+        // because they try to hand it over to the clipboard manager
+
+        println!("write html");
         test_clipboard_write_html();
+
+        println!("write text");
         test_clipboard_write_text();
 
+        println!("text consistency");
         test_clipboard_text_consistency();
 
+        println!("clear");
         test_clipboard_clear();
     }
 }

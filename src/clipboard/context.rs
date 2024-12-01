@@ -31,11 +31,13 @@ impl Context {
 
     pub(super) fn is_owner(&self, selection: Atom) -> Result<bool, Error> {
         let owner = self.display.get_selection_owner(selection)?;
+
         Ok(owner == Some(self.handle.window_id()))
     }
 
     pub(super) fn set_selection_owner(&self, selection: Atom) -> Result<(), Error> {
         self.handle.window().set_selection_owner(selection)?;
+
         Ok(())
     }
 

@@ -171,9 +171,10 @@ impl Clipboard {
     pub fn get_targets(&self) -> Result<Vec<Atom>, Error> {
         let mut targets = vec![];
 
-        if let Ok(Some(data)) =
-            self.read(self.atoms.protocol.targets, self.atoms.selections.clipboard)
-        {
+        // TODO: read results in a Err(Timeout)
+        let data = self.read(self.atoms.protocol.targets, self.atoms.selections.clipboard)?;
+
+        if let Some(data) = data {
             let bytes = data.bytes();
             for i in (0..bytes.len()).step_by(4) {
                 let ne_bytes = (&bytes[i..i + 4]).try_into().unwrap();
