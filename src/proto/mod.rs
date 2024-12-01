@@ -66,6 +66,7 @@ impl Opcode {
     pub const CONFIGURE_WINDOW: u8 = 12;
     pub const CIRCULATE_WINDOW: u8 = 13;
     pub const GET_GEOMETRY: u8 = 14;
+    pub const QUERY_TREE: u8 = 15;
     pub const INTERN_ATOM: u8 = 16;
     pub const GET_ATOM_NAME: u8 = 17;
     pub const CHANGE_PROPERTY: u8 = 18;
@@ -79,13 +80,114 @@ impl Opcode {
     pub const UNGRAB_POINTER: u8 = 27;
     pub const GRAB_BUTTON: u8 = 28;
     pub const UNGRAB_BUTTON: u8 = 29;
+    pub const CHANGE_ACTIVE_POINTER_GRAB: u8 = 30;
+    pub const GRAB_KEYBOARD: u8 = 31;
+    pub const UNGRAB_KEYBOARD: u8 = 32;
     pub const GRAB_KEY: u8 = 33;
+
+    // TODO: finish these
+    pub const UNGRAB_KEY: u8 = 34;
+    pub const ALLOW_EVENTS: u8 = 35;
+    pub const GRAB_SERVER: u8 = 36;
+    pub const UNGRAB_SERVER: u8 = 37;
+
     pub const QUERY_POINTER: u8 = 38;
+
+    // TODO: finish these
+    pub const GET_MOTION_EVENTS: u8 = 39;
+    pub const TRANSLATE_COORDINATES: u8 = 40;
+    pub const WARP_POINTER: u8 = 41;
+
     pub const SET_INPUT_FOCUS: u8 = 42;
     pub const GET_INPUT_FOCUS: u8 = 43;
+
+    // TODO: finish these
+    pub const QUERY_KEYMAP: u8 = 44;
+    pub const OPEN_FONT: u8 = 45;
+    pub const CLOSE_FONT: u8 = 46;
+    pub const QUERY_FONT: u8 = 47;
+    pub const QUERY_TEXT_EXTENTS: u8 = 48;
+    pub const LIST_FONTS: u8 = 49;
+    pub const LIST_FONTS_WITH_INFO: u8 = 50;
+    pub const SET_FONT_PATH: u8 = 51;
+    pub const GET_FONT_PATH: u8 = 52;
+    pub const CREATE_PIXMAP: u8 = 53;
+    pub const FREE_PIXMAP: u8 = 54;
+    pub const CREATE_GC: u8 = 55;
+    pub const CHANGE_GC: u8 = 56;
+    pub const COPY_GC: u8 = 57;
+    pub const SET_DASHES: u8 = 58;
+    pub const SET_CLIP_RECTANGLES: u8 = 59;
+    pub const FREE_GC: u8 = 60;
+    pub const CLEAR_AREA: u8 = 61;
+    pub const COPY_AREA: u8 = 62;
+    pub const COPY_PLANE: u8 = 63;
+    pub const POLY_POINT: u8 = 64;
+    pub const POLY_LINE: u8 = 65;
+    pub const POLY_SEGMENT: u8 = 66;
+    pub const POLY_RECTANGLE: u8 = 67;
+    pub const POLY_ARC: u8 = 68;
+    pub const FILL_POLY: u8 = 69;
+    pub const POLY_FILL_RECTANGLE: u8 = 70;
+    pub const POLY_FILL_ARC: u8 = 71;
+    pub const PUT_IMAGE: u8 = 72;
+    pub const GET_IMAGE: u8 = 73;
+    pub const POLY_TEXT8: u8 = 74;
+    pub const POLY_TEXT16: u8 = 75;
+    pub const IMAGE_TEXT8: u8 = 76;
+    pub const IMAGE_TEXT16: u8 = 77;
+    pub const CREATE_COLORMAP: u8 = 78;
+    pub const FREE_COLORMAP: u8 = 79;
+    pub const COPY_COLORMAP_AND_FREE: u8 = 80;
+    pub const INSTALL_COLORMAP: u8 = 81;
+    pub const UNINSTALL_COLORMAP: u8 = 82;
+    pub const LIST_INSTALLED_COLORMAPS: u8 = 83;
+    pub const ALLOC_COLOR: u8 = 84;
+    pub const ALLOC_NAMED_COLOR: u8 = 85;
+    pub const ALLOC_COLOR_CELLS: u8 = 86;
+    pub const ALLOC_COLOR_PLANES: u8 = 87;
+    pub const FREE_COLORS: u8 = 88;
+    pub const STORE_COLORS: u8 = 89;
+    pub const STORE_NAMED_COLOR: u8 = 90;
+    pub const QUERY_COLORS: u8 = 91;
+    pub const LOOKUP_COLOR: u8 = 92;
+    pub const CREATE_CURSOR: u8 = 93;
+    pub const CREATE_GLYPH_CURSOR: u8 = 94;
+    pub const FREE_CURSOR: u8 = 95;
+    pub const RECOLOR_CURSOR: u8 = 96;
+    pub const QUERY_BEST_SIZE: u8 = 97;
+
     pub const QUERY_EXTENSION: u8 = 98;
+
+    // TODO: finish this
+    pub const LIST_EXTENSIONS: u8 = 99;
+    pub const CHANGE_KEYBOARD_MAPPING: u8 = 100;
+
     pub const GET_KEYBOARD_MAPPING: u8 = 101;
+
+    // TODO: finish this
+    pub const CHANGE_KEYBOARD_CONTROL: u8 = 102;
+    pub const GET_KEYBOARD_CONTROL: u8 = 103;
+    pub const BELL: u8 = 104;
+    pub const CHANGE_POINTER_CONTROL: u8 = 105;
+    pub const GET_POINTER_CONTROL: u8 = 106;
+    pub const SET_SCREENSAVER: u8 = 107;
+    pub const GET_SCREENSAVER: u8 = 108;
+    pub const CHANGE_HOSTS: u8 = 109;
+    pub const LIST_HOSTS: u8 = 110;
+    pub const SET_ACCESS_CONTROL: u8 = 111;
+    pub const SET_CLOSE_DOWN_MODE: u8 = 112;
+
     pub const KILL_CLIENT: u8 = 113;
+
+    // TODO: finish this
+    pub const ROTATE_PROPERTIES: u8 = 114;
+    pub const FORCE_SCREENSAVER: u8 = 115;
+    pub const SET_POINTER_MAPPING: u8 = 116;
+    pub const GET_POINTER_MAPPING: u8 = 117;
+    pub const SET_MODIFIER_MAPPING: u8 = 118;
+    pub const GET_MODIFIER_MAPPING: u8 = 119;
+    pub const NO_OPERATION: u8 = 127;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd)]
@@ -229,6 +331,8 @@ pub enum Reply {
     GrabPointer(GrabPointerResponse),
     QueryExtension(QueryExtensionResponse),
     GetSelectionOwner(GetSelectionOwnerResponse),
+    QueryTree(TreeNode),
+    GrabKeyboard(GrabKeyboardStatus),
 
     #[cfg(feature = "xinerama")]
     XineramaIsActive(XineramaIsActiveResponse),
@@ -264,6 +368,8 @@ pub enum ReplyKind {
     QueryExtension,
     GetSelectionOwner,
     GetAtomName,
+    QueryTree,
+    GrabKeyboard,
 
     #[cfg(feature = "xinerama")]
     XineramaIsActive,
@@ -318,6 +424,36 @@ impl SequenceManager {
 
         Ok(())
     }
+}
+
+#[derive(Debug, Clone)]
+pub enum GrabKeyboardStatus {
+    Success,
+    AlreadyGrabbed,
+    InvalidTime,
+    NotViewable,
+    Frozen,
+    Other,
+}
+
+impl From<u8> for GrabKeyboardStatus {
+    fn from(value: u8) -> GrabKeyboardStatus {
+        match value {
+            0 => GrabKeyboardStatus::Success,
+            1 => GrabKeyboardStatus::AlreadyGrabbed,
+            2 => GrabKeyboardStatus::InvalidTime,
+            3 => GrabKeyboardStatus::NotViewable,
+            4 => GrabKeyboardStatus::Frozen,
+            _ => GrabKeyboardStatus::Other,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct TreeNode {
+    pub root: u32,
+    pub parent: u32,
+    pub children: Vec<u32>,
 }
 
 #[derive(Debug, Clone)]

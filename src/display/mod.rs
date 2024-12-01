@@ -469,6 +469,23 @@ impl Display {
         }
     }
 
+    /// This request changes the specified dynamic parameters if the pointer is actively grabbed by the
+    /// client and the specified time is no earlier than the last-pointer-grab time and no later than the current server time. The interpretation of event-mask and cursor are the same as in GrabPointer.
+    /// This request has no effect on the parameters of any passive grabs established with GrabButton.
+    pub fn change_active_pointer_grab(&self, cursor: Cursor, event_mask: Vec<EventMask>) -> Result<(), Error> {
+        self.sequence.skip();
+
+        self.stream.send_encode(ChangeActivePointerGrab {
+            opcode: Opcode::CHANGE_ACTIVE_POINTER_GRAB,
+            pad0: 0,
+            length: 4,
+            cursor: cursor as u32,
+            time: 0,
+            event_mask: event_mask.iter().fold(0, |acc, mask| acc | *mask as u16),
+            pad1: 0,
+        })
+    }
+
     /// this request returns the current focused window
     pub fn get_input_focus(&self) -> Result<GetInputFocusResponse, Error> {
         self.sequence.append(ReplyKind::GetInputFocus)?;
@@ -568,6 +585,18 @@ impl Display {
     /// get the min and max keycode
     pub fn display_keycodes(&self) -> KeycodeRange {
         KeycodeRange::new(self.setup.min_keycode, self.setup.max_keycode)
+    }
+
+    /// This request releases the keyboard if this client has it actively grabbed (as a result of either GrabKeyboard or GrabKey) and releases any queued events (server side).
+    pub fn ungrab_keyboard(&self) -> Result<(), Error> {
+        self.sequence.skip();
+
+        self.stream.send_encode(UngrabKeyboard {
+            opcode: Opcode::UNGRAB_KEYBOARD,
+            pad0: 0,
+            length: 2,
+            time: 0,
+        })
     }
 
     /// get the keyboard mapping from the server
@@ -815,6 +844,25 @@ impl EventListener {
 
                 self.replies.push(Reply::GetInputFocus(response))?;
             }
+            ReplyKind::GrabKeyboard => {
+                let _: GrabKeyboardResponse = self.stream.recv_decode()?;
+
+                self.replies.push(Reply::GrabKeyboard(GrabKeyboardStatus::from(event.detail)))?;
+            },
+            ReplyKind::QueryTree => {
+                let response: QueryTreeResponse = self.stream.recv_decode()?;
+
+                let bytes = self.stream.recv(response.num_children as usize * 4)?;
+
+                self.replies.push(Reply::QueryTree(TreeNode {
+                    root: response.root,
+                    parent: response.parent,
+                    children: bytes.chunks(4)
+                        .filter(|bytes| bytes.len() == 4)
+                        .map(|bytes| u32::from_le_bytes(bytes.try_into().expect("failed to convert")))
+                        .collect::<Vec<u32>>(),
+                }))?;
+            },
             ReplyKind::GetAtomName => {
                 let response: GetAtomNameResponse = self.stream.recv_decode()?;
 

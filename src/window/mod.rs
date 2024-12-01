@@ -361,6 +361,45 @@ impl Window {
         }
     }
 
+    /// This request actively grabs control of the keyboard. Further key events are reported only to the
+    /// grabbing client. This request overrides any active keyboard grab by this client.
+    pub fn grab_keyboard(&self, owner_events: bool, pointer_mode: PointerMode, keyboard_mode: KeyboardMode) -> Result<GrabKeyboardStatus, Error> {
+        self.sequence.append(ReplyKind::GrabKeyboard)?;
+
+        self.stream.send_encode(GrabKeyboard {
+            opcode: Opcode::GRAB_KEYBOARD,
+            owner_events: owner_events.then(|| 1).unwrap_or(0),
+            length: 4,
+            grab_window: self.id(),
+            time: 0,
+            pointer_mode: pointer_mode as u8,
+            keyboard_mode: keyboard_mode as u8,
+            pad0: 0,
+        })?;
+
+        match self.replies.wait()? {
+            Reply::GrabKeyboard(status) => Ok(status),
+            _ => unreachable!(),
+        }
+    }
+
+    /// This request returns the root, the parent, and the children of the window. The children are listed in bottom-to-top stacking order.
+    pub fn query_tree(&self) -> Result<TreeNode, Error> {
+        self.sequence.append(ReplyKind::QueryTree)?;
+
+        self.stream.send_encode(QueryTree {
+            opcode: Opcode::QUERY_TREE,
+            pad0: 0,
+            length: 2,
+            wid: self.id(),
+        })?;
+
+        match self.replies.wait()? {
+            Reply::QueryTree(node) => Ok(node),
+            _ => unreachable!(),
+        }
+    }
+
     /// this request adds or removes the specified window from the client’s save-set, the window must have been created by some other client (or a Match error results)
     pub fn change_save_set(&self, mode: SaveSetMode) -> Result<(), Error> {
         self.sequence.skip();
