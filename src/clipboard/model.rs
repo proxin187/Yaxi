@@ -326,6 +326,49 @@ impl HandoverStatus {
 
 #[derive(Debug, Default)]
 pub(super) struct Handover {
-    pub(super) state: Mutex<HandoverStatus>,
-    pub(super) condvar: Condvar,
+    status: Mutex<HandoverStatus>,
+    condvar: Condvar,
+}
+
+impl Handover {
+    pub(super) fn update_status(&self, written: bool, notified: bool) {
+        log::debug!(
+            "Updating handover state: written: {}, notified: {}",
+            written,
+            notified
+        );
+        let mut status = self.status.lock().unwrap();
+
+        if written {
+            status.written = true;
+        }
+        if notified {
+            status.notified = true;
+        }
+
+        // if status is completed, notify waiting threads
+        if status.written && status.notified {
+            status.state = HandoverState::Completed;
+            self.condvar.notify_all();
+        }
+    }
+
+    pub(super) fn status(&self) -> HandoverStatus {
+        self.status.lock().unwrap().clone()
+    }
+
+    pub(super) fn is_completed(&self) -> bool {
+        let status = self.status.lock().unwrap();
+        status.is_completed()
+    }
+
+    pub(super) fn is_in_progress(&self) -> bool {
+        let status = self.status.lock().unwrap();
+        status.is_in_progress()
+    }
+
+    pub(super) fn set_in_progress(&self) {
+        let mut status = self.status.lock().unwrap();
+        status.state = HandoverState::InProgress;
+    }
 }
