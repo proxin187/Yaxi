@@ -395,9 +395,9 @@ impl EventHandler {
                 return Err(Error::Timeout);
             }
 
-            let timeout_remaining = deadline - now;
+            let remaining = deadline - now;
             let (new_completed, timeout_result) = cvar
-                .wait_timeout(completed, timeout_remaining)
+                .wait_timeout(completed, remaining)
                 .map_err(|_| Error::Timeout)?;
             completed = new_completed;
 
@@ -408,7 +408,6 @@ impl EventHandler {
 
         // get data from cache
         let mut transfers = transfers.lock().unwrap();
-
         if let Some((state, _)) = transfers.remove(&(selection, target)) {
             if state.completed {
                 Ok(Some(ClipboardData::new(state.data, target)))

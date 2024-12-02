@@ -160,7 +160,7 @@ impl Cache {
             let size = if self.atoms.is_side_effect_target(entry.data.format) {
                 -1
             } else {
-                entry.data.size() as i32
+                entry.data.len() as i32
             };
             TargetSize { target, size }
         });
@@ -176,7 +176,7 @@ impl Cache {
                 let size = if self.atoms.is_side_effect_target(entry.data.format) {
                     -1
                 } else {
-                    entry.data.size() as i32
+                    entry.data.len() as i32
                 };
                 TargetSize {
                     target: key.1,
@@ -232,7 +232,15 @@ impl ClipboardData {
         &self.bytes
     }
 
-    pub(super) fn size(&self) -> usize {
+    pub(super) fn format(&self) -> Atom {
+        self.format
+    }
+
+    pub(super) fn is_empty(&self) -> bool {
+        self.bytes.is_empty()
+    }
+
+    pub(super) fn len(&self) -> usize {
         self.bytes.len()
     }
 }
