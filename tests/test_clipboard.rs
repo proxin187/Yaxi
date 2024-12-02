@@ -11,6 +11,29 @@ mod tests {
 
     #[test]
     #[serial]
+    fn test_clipboard_get_targets() {
+        let clipboard = Clipboard::new(None).unwrap();
+
+        let result = clipboard.get_targets_with_name();
+        println!("{:?}", result);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    #[serial]
+    fn test_clipboard_clear() {
+        let clipboard = Clipboard::new(None).unwrap();
+
+        let result = clipboard.clear();
+        assert!(result.is_ok());
+
+        let text = clipboard.get_text();
+        assert!(text.is_ok());
+        assert_eq!(None, text.unwrap());
+    }
+
+    #[test]
+    #[serial]
     fn test_clipboard_write_image() {
         let clipboard = Clipboard::new(None).unwrap();
 
@@ -78,20 +101,8 @@ mod tests {
         let clipboard = Clipboard::new(None).unwrap();
 
         let result = clipboard.get_html();
+        println!("{:?}", result);
         assert!(result.is_ok());
-    }
-
-    #[test]
-    #[serial]
-    fn test_clipboard_clear() {
-        let clipboard = Clipboard::new(None).unwrap();
-
-        let result = clipboard.clear();
-        assert!(result.is_ok());
-
-        let text = clipboard.get_text();
-        assert!(text.is_ok());
-        assert_eq!(None, text.unwrap());
     }
 
     #[test]
