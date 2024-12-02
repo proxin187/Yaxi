@@ -48,7 +48,8 @@ impl Clipboard {
         self.handler.clear(self.atoms.selections.clipboard)?;
 
         // we need to have this here because self.handler.clear doesnt work
-        self.handler.set_targets(self.atoms.selections.clipboard, vec![])?;
+        self.handler
+            .set_targets(self.atoms.selections.clipboard, vec![])?;
 
         Ok(())
     }
@@ -60,7 +61,11 @@ impl Clipboard {
         }
 
         // 2. if read failed, try to get from clipboard manager
-        if self.context.get_selection_owner_id(self.atoms.selections.clipboard_manager)?.is_none() {
+        if self
+            .context
+            .get_selection_owner_id(self.atoms.selections.clipboard_manager)?
+            .is_none()
+        {
             return Ok(None);
         }
 

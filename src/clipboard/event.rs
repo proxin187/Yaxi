@@ -297,7 +297,8 @@ impl EventHandler {
                     return Err(Error::Timeout);
                 }
                 let duration = timeout - now;
-                let (new_completed, timeout_result) = cvar.wait_timeout(completed, duration).unwrap();
+                let (new_completed, timeout_result) =
+                    cvar.wait_timeout(completed, duration).unwrap();
                 completed = new_completed;
 
                 if timeout_result.timed_out() {
@@ -310,7 +311,7 @@ impl EventHandler {
 
             if let Some((state, _)) = transfers.remove(&(selection, target)) {
                 if state.completed {
-                    let data = ClipboardData::new(state.data, state.format, 0);
+                    let data = ClipboardData::new(state.data, state.format);
                     // Update cache
                     self.state.cache.set(selection, target, data.clone())?;
                     Ok(Some(data))
@@ -331,7 +332,7 @@ impl EventHandler {
             .flat_map(|&t| t.to_ne_bytes().to_vec())
             .collect::<Vec<_>>();
 
-        let data = ClipboardData::new(bytes, self.state.atoms.protocol.targets, 0);
+        let data = ClipboardData::new(bytes, self.state.atoms.protocol.targets);
 
         self.state
             .cache
@@ -412,7 +413,7 @@ impl EventHandler {
 
         if let Some((state, _)) = transfers.remove(&(selection, target)) {
             if state.completed {
-                Ok(Some(ClipboardData::new(state.data, target, 0)))
+                Ok(Some(ClipboardData::new(state.data, target)))
             } else {
                 Ok(None)
             }
