@@ -237,6 +237,12 @@ impl PartialEq for Window {
     }
 }
 
+impl From<Window> for u32 {
+    fn from(window: Window) -> u32 {
+        window.id()
+    }
+}
+
 impl Window {
     pub fn new(
         stream: Stream,
