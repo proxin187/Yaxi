@@ -16,6 +16,66 @@ pub mod error;
 mod event;
 mod model;
 
+#[derive(Debug, Clone)]
+pub struct Html {
+    pub html: String,
+    pub alt: Option<String>,
+}
+
+impl Html {
+    pub fn new(html: String, alt: Option<String>) -> Html {
+        Html { html, alt }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.html.is_empty()
+    }
+
+    pub fn html(&self) -> &str {
+        &self.html
+    }
+
+    pub fn alt(&self) -> Option<&str> {
+        self.alt.as_deref()
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum ImageFormat {
+    Png,
+    Jpeg,
+    Tiff,
+    Bmp,
+}
+
+#[derive(Debug, Clone)]
+pub struct Image {
+    pub bytes: Vec<u8>,
+    pub format: ImageFormat,
+}
+
+impl Image {
+    pub fn len(&self) -> usize {
+        self.bytes.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.bytes.is_empty()
+    }
+
+    pub fn format(&self) -> ImageFormat {
+        self.format
+    }
+
+    pub fn bytes(&self) -> &[u8] {
+        &self.bytes
+    }
+
+    pub fn into_bytes(self) -> Vec<u8> {
+        self.bytes
+    }
+}
+
 pub struct Clipboard {
     context: Context,
     atoms: Atoms,
@@ -36,22 +96,6 @@ impl Clipboard {
             atoms,
             handler,
         })
-    }
-
-    pub fn clear(&self) -> Result<(), Error> {
-        self.context
-            .set_selection_owner(self.atoms.selections.clipboard)?;
-
-        self.context.delete_property(self.context.handle.marker())?;
-
-        // TODO: this should clear the clipboard targets but it doesnt
-        self.handler.clear(self.atoms.selections.clipboard)?;
-
-        // we need to have this here because self.handler.clear doesnt work
-        self.handler
-            .set_targets(self.atoms.selections.clipboard, vec![])?;
-
-        Ok(())
     }
 
     fn read(&self, target: Atom, selection: Atom) -> Result<Option<ClipboardData>, Error> {
@@ -77,7 +121,7 @@ impl Clipboard {
         )?;
 
         // 4. wait data
-        self.handler.wait_data(target, Duration::from_secs(5))
+        self.handler.wait_data(target, Duration::from_millis(200))
     }
 
     fn write(&self, data: Vec<ClipboardData>, selection: Atom) -> Result<(), Error> {
@@ -112,6 +156,19 @@ impl Clipboard {
 }
 
 impl Clipboard {
+    pub fn clear(&self) -> Result<(), Error> {
+        let selection = self.atoms.selections.clipboard;
+        self.write(
+            vec![ClipboardData::from_bytes(
+                vec![],
+                self.atoms.formats.utf8_string,
+            )],
+            selection,
+        )?;
+        self.handler.clear(selection)?;
+        Ok(())
+    }
+
     pub fn set_text(&self, text: &str) -> Result<(), Error> {
         let bytes = text.as_bytes();
         let data = vec![
@@ -131,26 +188,33 @@ impl Clipboard {
             self.atoms.formats.utf8_mime_alt,
         ];
 
-        for format in &formats {
-            match self.read(*format, self.atoms.selections.clipboard)? {
-                Some(data) => {
+        for format in formats {
+            match self.read(format, self.atoms.selections.clipboard) {
+                Ok(Some(data)) => {
+                    if data.is_empty() {
+                        continue;
+                    }
                     let bytes = data.bytes().to_owned();
                     let text = String::from_utf8(bytes)?;
                     return Ok(Some(text));
                 }
-                None => continue,
+                _ => continue,
             }
         }
 
         Ok(None)
     }
 
-    pub fn get_html(&self) -> Result<Option<(String, Option<String>)>, Error> {
-        if let Some(data) = self.read(self.atoms.formats.html, self.atoms.selections.clipboard)? {
+    pub fn get_html(&self) -> Result<Option<Html>, Error> {
+        if let Ok(Some(data)) = self.read(self.atoms.formats.html, self.atoms.selections.clipboard)
+        {
+            if data.is_empty() {
+                return Ok(None);
+            }
             let bytes = data.bytes().to_owned();
             let html = String::from_utf8(bytes)?;
             let alt = self.get_text().ok().flatten();
-            return Ok(Some((html, alt)));
+            return Ok(Some(Html { html, alt }));
         }
 
         Ok(None)
@@ -169,6 +233,92 @@ impl Clipboard {
             ));
         }
 
+        self.write(data, self.atoms.selections.clipboard)?;
+        Ok(())
+    }
+
+    pub fn get_uri_list(&self) -> Result<Option<Vec<String>>, Error> {
+        if let Ok(Some(data)) =
+            self.read(self.atoms.formats.uri_list, self.atoms.selections.clipboard)
+        {
+            if data.is_empty() {
+                return Ok(None);
+            }
+            let bytes = data.bytes().to_owned();
+            let text = String::from_utf8(bytes)?;
+            let list = text.lines().map(|s| s.to_string()).collect::<Vec<_>>();
+            if !list.is_empty() {
+                return Ok(Some(list));
+            }
+        }
+
+        Ok(None)
+    }
+
+    pub fn set_uri_list(&self, paths: &[&std::path::Path]) -> Result<(), Error> {
+        let uris: Vec<String> = paths
+            .iter()
+            .filter_map(|&path| {
+                let path = path.canonicalize().unwrap_or(path.to_path_buf());
+                if path.is_absolute() {
+                    Some(format!("file://{}", path.display()))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        if uris.is_empty() {
+            return Ok(());
+        }
+
+        let text = uris.join("\n");
+        let data = vec![ClipboardData::from_bytes(
+            text.as_bytes().to_vec(),
+            self.atoms.formats.uri_list,
+        )];
+
+        self.write(data, self.atoms.selections.clipboard)?;
+        Ok(())
+    }
+
+    pub fn get_image(&self) -> Result<Option<Image>, Error> {
+        let formats = [
+            self.atoms.formats.png,
+            self.atoms.formats.jpeg,
+            self.atoms.formats.tiff,
+            self.atoms.formats.bmp,
+        ];
+
+        for format in formats {
+            if let Ok(Some(data)) = self.read(format, self.atoms.selections.clipboard) {
+                if data.is_empty() {
+                    continue;
+                }
+                let bytes = data.bytes().to_owned();
+                let format = match format {
+                    x if x == self.atoms.formats.png => ImageFormat::Png,
+                    x if x == self.atoms.formats.jpeg => ImageFormat::Jpeg,
+                    x if x == self.atoms.formats.tiff => ImageFormat::Tiff,
+                    x if x == self.atoms.formats.bmp => ImageFormat::Bmp,
+                    _ => return Ok(None),
+                };
+                return Ok(Some(Image { bytes, format }));
+            }
+        }
+
+        Ok(None)
+    }
+
+    pub fn set_image(&self, bytes: Vec<u8>, format: ImageFormat) -> Result<(), Error> {
+        let format = match format {
+            ImageFormat::Png => self.atoms.formats.png,
+            ImageFormat::Jpeg => self.atoms.formats.jpeg,
+            ImageFormat::Tiff => self.atoms.formats.tiff,
+            ImageFormat::Bmp => self.atoms.formats.bmp,
+        };
+
+        let data = vec![ClipboardData::from_bytes(bytes, format)];
         self.write(data, self.atoms.selections.clipboard)?;
         Ok(())
     }
