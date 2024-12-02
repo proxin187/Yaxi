@@ -362,7 +362,7 @@ impl Handover {
     }
 
     pub(super) fn status(&self) -> HandoverStatus {
-        self.status.lock().unwrap().clone()
+        *self.status.lock().unwrap()
     }
 
     pub(super) fn is_completed(&self) -> bool {

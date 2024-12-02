@@ -76,6 +76,18 @@ impl Image {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct Target {
+    pub atom: Atom,
+    pub name: String,
+}
+
+impl std::fmt::Display for Target {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}({})", self.atom.id(), self.name)
+    }
+}
+
 pub struct Clipboard {
     context: Context,
     atoms: Atoms,
@@ -121,7 +133,7 @@ impl Clipboard {
         )?;
 
         // 4. wait data
-        self.handler.wait_data(target, Duration::from_millis(200))
+        self.handler.wait_data(target, Duration::from_secs(5))
     }
 
     fn write(&self, data: Vec<ClipboardData>, selection: Atom) -> Result<(), Error> {
@@ -141,13 +153,12 @@ impl Clipboard {
         ];
 
         // 4. set data and targets
-        let data_clone = data.clone();
-        for item in &data_clone {
+        for item in &data {
             targets.push(item.format);
         }
 
         self.handler.set_targets(selection, targets)?;
-        for item in data_clone {
+        for item in data {
             self.handler.set(selection, item.format, item)?;
         }
 
@@ -182,6 +193,7 @@ impl Clipboard {
     }
 
     pub fn get_text(&self) -> Result<Option<String>, Error> {
+        let targets = self.get_targets()?;
         let formats = [
             self.atoms.formats.utf8_string,
             self.atoms.formats.utf8_mime,
@@ -189,30 +201,31 @@ impl Clipboard {
         ];
 
         for format in formats {
-            match self.read(format, self.atoms.selections.clipboard) {
-                Ok(Some(data)) => {
-                    if data.is_empty() {
-                        continue;
-                    }
-                    let bytes = data.bytes().to_owned();
-                    let text = String::from_utf8(bytes)?;
-                    return Ok(Some(text));
+            if !targets.contains(&format) {
+                continue;
+            }
+            if let Ok(Some(data)) = self.read(format, self.atoms.selections.clipboard) {
+                if data.is_empty() {
+                    continue;
                 }
-                _ => continue,
+                return Ok(Some(String::from_utf8(data.bytes().to_owned())?));
             }
         }
-
         Ok(None)
     }
 
     pub fn get_html(&self) -> Result<Option<Html>, Error> {
+        let targets = self.get_targets()?;
+        if !targets.contains(&self.atoms.formats.html) {
+            return Ok(None);
+        }
+
         if let Ok(Some(data)) = self.read(self.atoms.formats.html, self.atoms.selections.clipboard)
         {
             if data.is_empty() {
                 return Ok(None);
             }
-            let bytes = data.bytes().to_owned();
-            let html = String::from_utf8(bytes)?;
+            let html = String::from_utf8(data.bytes().to_owned())?;
             let alt = self.get_text().ok().flatten();
             return Ok(Some(Html { html, alt }));
         }
@@ -238,20 +251,23 @@ impl Clipboard {
     }
 
     pub fn get_uri_list(&self) -> Result<Option<Vec<String>>, Error> {
-        if let Ok(Some(data)) =
-            self.read(self.atoms.formats.uri_list, self.atoms.selections.clipboard)
+        let targets = self.get_targets()?;
+        if !targets.contains(&self.atoms.formats.uri_list) {
+            return Ok(None);
+        }
+
+        if let Some(data) =
+            self.read(self.atoms.formats.uri_list, self.atoms.selections.clipboard)?
         {
             if data.is_empty() {
                 return Ok(None);
             }
-            let bytes = data.bytes().to_owned();
-            let text = String::from_utf8(bytes)?;
-            let list = text.lines().map(|s| s.to_string()).collect::<Vec<_>>();
+            let text = String::from_utf8(data.bytes().to_owned())?;
+            let list: Vec<_> = text.lines().map(|s| s.to_string()).collect();
             if !list.is_empty() {
                 return Ok(Some(list));
             }
         }
-
         Ok(None)
     }
 
@@ -283,6 +299,7 @@ impl Clipboard {
     }
 
     pub fn get_image(&self) -> Result<Option<Image>, Error> {
+        let targets = self.get_targets()?;
         let formats = [
             self.atoms.formats.png,
             self.atoms.formats.jpeg,
@@ -291,11 +308,14 @@ impl Clipboard {
         ];
 
         for format in formats {
+            if !targets.contains(&format) {
+                continue;
+            }
+
             if let Ok(Some(data)) = self.read(format, self.atoms.selections.clipboard) {
                 if data.is_empty() {
                     continue;
                 }
-                let bytes = data.bytes().to_owned();
                 let format = match format {
                     x if x == self.atoms.formats.png => ImageFormat::Png,
                     x if x == self.atoms.formats.jpeg => ImageFormat::Jpeg,
@@ -303,10 +323,12 @@ impl Clipboard {
                     x if x == self.atoms.formats.bmp => ImageFormat::Bmp,
                     _ => return Ok(None),
                 };
-                return Ok(Some(Image { bytes, format }));
+                return Ok(Some(Image {
+                    bytes: data.bytes().to_owned(),
+                    format,
+                }));
             }
         }
-
         Ok(None)
     }
 
@@ -326,15 +348,34 @@ impl Clipboard {
     pub fn get_targets(&self) -> Result<Vec<Atom>, Error> {
         let mut targets = vec![];
 
-        // TODO: read results in a Err(Timeout)
-        let data = self.read(self.atoms.protocol.targets, self.atoms.selections.clipboard)?;
-
-        if let Some(data) = data {
+        if let Ok(Some(data)) =
+            self.read(self.atoms.protocol.targets, self.atoms.selections.clipboard)
+        {
             let bytes = data.bytes();
             for i in (0..bytes.len()).step_by(4) {
                 let ne_bytes = (&bytes[i..i + 4]).try_into().unwrap();
                 let target = Atom::from_ne_bytes(ne_bytes);
                 targets.push(target);
+            }
+        }
+
+        Ok(targets)
+    }
+
+    pub fn get_targets_with_name(&self) -> Result<Vec<Target>, Error> {
+        let mut targets = vec![];
+
+        if let Ok(Some(data)) =
+            self.read(self.atoms.protocol.targets, self.atoms.selections.clipboard)
+        {
+            let bytes = data.bytes();
+            for i in (0..bytes.len()).step_by(4) {
+                let ne_bytes = (&bytes[i..i + 4]).try_into().unwrap();
+                let atom = Atom::from_ne_bytes(ne_bytes);
+                let name = atom.name().unwrap_or_else(|| {
+                    self.context.get_atom_name(atom).unwrap_or(atom.to_string())
+                });
+                targets.push(Target { atom, name });
             }
         }
 
@@ -363,7 +404,7 @@ impl Clipboard {
         }
 
         // 3. make sure the data is not in progress
-        std::thread::sleep(Duration::from_millis(50));
+        std::thread::sleep(Duration::from_millis(100));
 
         // 4. handover
         self.context.convert_selection_to_self(
