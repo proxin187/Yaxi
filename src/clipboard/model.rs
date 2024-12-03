@@ -54,12 +54,10 @@ impl Cache {
     pub(super) fn get_all(&self, selection: Atom) -> Result<Option<Vec<ClipboardData>>, Error> {
         let guard = self.data.read().map_err(|e| Error::RwLock(e.to_string()))?;
 
-        let mut data = guard
+        let data = guard
             .iter()
             .map(|(_, entry)| entry.data.clone())
             .collect::<Vec<_>>();
-
-        data.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
 
         Ok(Some(data))
     }
@@ -162,7 +160,7 @@ impl Cache {
             let size = if self.atoms.is_side_effect_target(entry.data.format) {
                 -1
             } else {
-                entry.data.size() as i32
+                entry.data.len() as i32
             };
             TargetSize { target, size }
         });
@@ -178,7 +176,7 @@ impl Cache {
                 let size = if self.atoms.is_side_effect_target(entry.data.format) {
                     -1
                 } else {
-                    entry.data.size() as i32
+                    entry.data.len() as i32
                 };
                 TargetSize {
                     target: key.1,
@@ -213,15 +211,13 @@ impl Cache {
 pub(super) struct ClipboardData {
     pub(super) bytes: Arc<Vec<u8>>,
     pub(super) format: Atom,
-    pub(super) timestamp: u32,
 }
 
 impl ClipboardData {
-    pub(super) fn new(bytes: Vec<u8>, format: Atom, timestamp: u32) -> ClipboardData {
+    pub(super) fn new(bytes: Vec<u8>, format: Atom) -> ClipboardData {
         ClipboardData {
             bytes: Arc::new(bytes),
             format,
-            timestamp,
         }
     }
 
@@ -229,7 +225,6 @@ impl ClipboardData {
         ClipboardData {
             bytes: Arc::new(bytes),
             format,
-            timestamp: 0,
         }
     }
 
@@ -237,7 +232,15 @@ impl ClipboardData {
         &self.bytes
     }
 
-    pub(super) fn size(&self) -> usize {
+    pub(super) fn format(&self) -> Atom {
+        self.format
+    }
+
+    pub(super) fn is_empty(&self) -> bool {
+        self.bytes.is_empty()
+    }
+
+    pub(super) fn len(&self) -> usize {
         self.bytes.len()
     }
 }
@@ -331,6 +334,49 @@ impl HandoverStatus {
 
 #[derive(Debug, Default)]
 pub(super) struct Handover {
-    pub(super) state: Mutex<HandoverStatus>,
-    pub(super) condvar: Condvar,
+    status: Mutex<HandoverStatus>,
+    condvar: Condvar,
+}
+
+impl Handover {
+    pub(super) fn update_status(&self, written: bool, notified: bool) {
+        log::debug!(
+            "Updating handover state: written: {}, notified: {}",
+            written,
+            notified
+        );
+        let mut status = self.status.lock().unwrap();
+
+        if written {
+            status.written = true;
+        }
+        if notified {
+            status.notified = true;
+        }
+
+        // if status is completed, notify waiting threads
+        if status.written && status.notified {
+            status.state = HandoverState::Completed;
+            self.condvar.notify_all();
+        }
+    }
+
+    pub(super) fn status(&self) -> HandoverStatus {
+        *self.status.lock().unwrap()
+    }
+
+    pub(super) fn is_completed(&self) -> bool {
+        let status = self.status.lock().unwrap();
+        status.is_completed()
+    }
+
+    pub(super) fn is_in_progress(&self) -> bool {
+        let status = self.status.lock().unwrap();
+        status.is_in_progress()
+    }
+
+    pub(super) fn set_in_progress(&self) {
+        let mut status = self.status.lock().unwrap();
+        status.state = HandoverState::InProgress;
+    }
 }

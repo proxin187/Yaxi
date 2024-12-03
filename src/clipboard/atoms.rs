@@ -53,6 +53,7 @@ pub(super) struct FormatAtoms {
     pub(super) png: Atom,
     pub(super) jpeg: Atom,
     pub(super) tiff: Atom,
+    pub(super) bmp: Atom,
     pub(super) pdf: Atom,
     pub(super) uri_list: Atom,
 }
@@ -155,6 +156,7 @@ impl FormatAtoms {
             png: display.intern("image/png", false)?,
             jpeg: display.intern("image/jpeg", false)?,
             tiff: display.intern("image/tiff", false)?,
+            bmp: display.intern("image/bmp", false)?,
             pdf: display.intern("application/pdf", false)?,
             uri_list: display.intern("text/uri-list", false)?,
         })

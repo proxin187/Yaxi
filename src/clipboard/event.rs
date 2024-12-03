@@ -13,7 +13,7 @@ use crate::window::{PropFormat, PropMode, Window};
 use super::atoms::Atoms;
 use super::context::Context;
 use super::error::Error;
-use super::model::{Cache, ClipboardData, HandoverState, HandoverStatus};
+use super::model::{Cache, ClipboardData, Handover, HandoverState, HandoverStatus};
 
 const MAX_REGULAR_SIZE: usize = 65536;
 const INCR_CHUNK_SIZE: usize = 4096;
@@ -145,7 +145,6 @@ impl TransferState {
 }
 
 type Transfers = Mutex<HashMap<(Atom, Atom), (TransferState, Arc<(Mutex<bool>, Condvar)>)>>;
-type Handover = (Mutex<HandoverStatus>, Condvar);
 
 #[derive(Clone)]
 struct State {
@@ -164,7 +163,7 @@ impl State {
             atoms,
             cache: Arc::new(Cache::new(atoms)),
             transfers: Arc::new(Mutex::new(HashMap::default())),
-            handover: Arc::new((Mutex::new(HandoverStatus::default()), Condvar::default())),
+            handover: Arc::new(Handover::default()),
         }
     }
 }
@@ -203,9 +202,9 @@ impl EventHandler {
                             &state, requestor, selection, target, property, time,
                         )?;
                         if selection == state.atoms.selections.clipboard_manager
-                            && state.handover.0.lock().unwrap().is_in_progress()
+                            && state.handover.is_in_progress()
                         {
-                            Self::update_handover_status(&state, false, true);
+                            state.handover.update_status(false, true);
                         }
                     }
                     Event::SelectionRequest {
@@ -218,10 +217,9 @@ impl EventHandler {
                         Self::handle_selection_request(
                             &state, selection, target, property, owner, time,
                         )?;
-                        if target != state.atoms.protocol.targets
-                            && state.handover.0.lock().unwrap().is_in_progress()
+                        if target != state.atoms.protocol.targets && state.handover.is_in_progress()
                         {
-                            Self::update_handover_status(&state, true, false);
+                            state.handover.update_status(true, false);
                         }
                     }
                     Event::SelectionClear {
@@ -297,7 +295,8 @@ impl EventHandler {
                     return Err(Error::Timeout);
                 }
                 let duration = timeout - now;
-                let (new_completed, timeout_result) = cvar.wait_timeout(completed, duration).unwrap();
+                let (new_completed, timeout_result) =
+                    cvar.wait_timeout(completed, duration).unwrap();
                 completed = new_completed;
 
                 if timeout_result.timed_out() {
@@ -310,7 +309,7 @@ impl EventHandler {
 
             if let Some((state, _)) = transfers.remove(&(selection, target)) {
                 if state.completed {
-                    let data = ClipboardData::new(state.data, state.format, 0);
+                    let data = ClipboardData::new(state.data, state.format);
                     // Update cache
                     self.state.cache.set(selection, target, data.clone())?;
                     Ok(Some(data))
@@ -331,7 +330,7 @@ impl EventHandler {
             .flat_map(|&t| t.to_ne_bytes().to_vec())
             .collect::<Vec<_>>();
 
-        let data = ClipboardData::new(bytes, self.state.atoms.protocol.targets, 0);
+        let data = ClipboardData::new(bytes, self.state.atoms.protocol.targets);
 
         self.state
             .cache
@@ -396,9 +395,9 @@ impl EventHandler {
                 return Err(Error::Timeout);
             }
 
-            let timeout_remaining = deadline - now;
+            let remaining = deadline - now;
             let (new_completed, timeout_result) = cvar
-                .wait_timeout(completed, timeout_remaining)
+                .wait_timeout(completed, remaining)
                 .map_err(|_| Error::Timeout)?;
             completed = new_completed;
 
@@ -409,10 +408,9 @@ impl EventHandler {
 
         // get data from cache
         let mut transfers = transfers.lock().unwrap();
-
         if let Some((state, _)) = transfers.remove(&(selection, target)) {
             if state.completed {
-                Ok(Some(ClipboardData::new(state.data, target, 0)))
+                Ok(Some(ClipboardData::new(state.data, target)))
             } else {
                 Ok(None)
             }
@@ -422,49 +420,23 @@ impl EventHandler {
     }
 
     pub fn check_handover_state(&self) -> Result<Option<HandoverStatus>, Error> {
-        let (lock, _) = &*self.state.handover;
-        let state = lock.lock().unwrap();
+        let status = self.state.handover.status();
 
         // already completed
-        if state.is_completed() {
-            return Ok(Some(*state));
+        if status.is_completed() {
+            return Ok(Some(status));
         }
 
         // in progress
-        if state.written || state.notified {
-            return Ok(Some(*state));
+        if status.written || status.notified {
+            return Ok(Some(status));
         }
 
         Ok(None)
     }
 
-    fn update_handover_status(state: &State, written: bool, notified: bool) {
-        log::debug!(
-            "Updating handover state: written: {}, notified: {}",
-            written,
-            notified
-        );
-        let (lock, cvar) = &*state.handover;
-        let mut status = lock.lock().unwrap();
-
-        if written {
-            status.written = true;
-        }
-        if notified {
-            status.notified = true;
-        }
-
-        // if status is completed, notify waiting threads
-        if status.written && status.notified {
-            status.state = HandoverState::Completed;
-            cvar.notify_all();
-        }
-    }
-
     pub(super) fn set_in_progress(&self) {
-        let (lock, _) = &*self.state.handover;
-        let mut status = lock.lock().unwrap();
-        status.state = HandoverState::InProgress;
+        self.state.handover.set_in_progress();
     }
 
     pub(super) fn wait_handover_changed(&self) -> Result<HandoverStatus, Error> {
@@ -494,8 +466,8 @@ impl EventHandler {
             return Ok(());
         }
 
-        if state.handover.0.lock().unwrap().is_in_progress() {
-            Self::update_handover_status(state, false, true);
+        if state.handover.is_in_progress() {
+            state.handover.update_status(false, true);
         }
 
         Ok(())

@@ -183,4 +183,8 @@ impl Context {
             .send_event(event, event_mask, propogate)?;
         Ok(())
     }
+
+    pub(super) fn get_atom_name(&self, atom: Atom) -> Option<String> {
+        self.display.get_atom_name(atom).ok()
+    }
 }
