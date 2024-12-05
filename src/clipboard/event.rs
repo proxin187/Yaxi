@@ -13,7 +13,7 @@ use crate::window::{PropFormat, PropMode, Window};
 use super::atoms::Atoms;
 use super::context::Context;
 use super::error::Error;
-use super::model::{Cache, ClipboardData, Handover, HandoverState, HandoverStatus};
+use super::model::{Cache, ClipboardData, Handover, HandoverStatus};
 
 const MAX_REGULAR_SIZE: usize = 65536;
 const INCR_CHUNK_SIZE: usize = 4096;
@@ -30,9 +30,7 @@ pub(super) struct EventLoop {
 
 impl EventLoop {
     pub(super) fn start(&self, display: Display) -> Result<(), Error> {
-        // TODO: dont use unwrap here
-
-        if self.handle.lock().unwrap().is_some() {
+        if self.handle.lock().map_err(|e| Error::Lock(e.to_string()))?.is_some() {
             return Err(Error::EventLoopError("Event loop already running".into()));
         }
 
@@ -41,10 +39,14 @@ impl EventLoop {
         let killed = self.killed.clone();
 
         let handle = thread::spawn(move || {
+            // TODO: this event polling can be even more performant if we use condvar instead of a
+            // poll interval
+
             while !killed.load(Ordering::Relaxed) {
                 match display.poll_event() {
                     Ok(true) => {
-                        let mut events = events.lock().unwrap();
+                        let mut events = events.lock().map_err(|e| Error::Lock(e.to_string()))?;
+
                         if let Ok(event) = display.next_event() {
                             events.push_back(event);
                             condvar.notify_all();
@@ -57,6 +59,7 @@ impl EventLoop {
                         if killed.load(Ordering::Relaxed) {
                             return Ok(());
                         }
+
                         return Err(Error::EventLoopError(format!("Event source error: {}", e)));
                     }
                 }
@@ -64,7 +67,8 @@ impl EventLoop {
             Ok(())
         });
 
-        *self.handle.lock().unwrap() = Some(handle);
+        *self.handle.lock().map_err(|e| Error::Lock(e.to_string()))? = Some(handle);
+
         Ok(())
     }
 
@@ -73,9 +77,10 @@ impl EventLoop {
             return Err(Error::Terminated);
         }
 
-        let mut events = self.events.lock().unwrap();
+        let mut events = self.events.lock().map_err(|e| Error::Lock(e.to_string()))?;
+
         while events.is_empty() && !self.killed.load(Ordering::Relaxed) {
-            events = self.condvar.wait(events).unwrap();
+            events = self.condvar.wait(events).map_err(|e| Error::Other(e.to_string()))?;
         }
 
         if self.killed.load(Ordering::Relaxed) {
@@ -89,8 +94,8 @@ impl EventLoop {
         self.killed.store(true, Ordering::Relaxed);
         self.condvar.notify_all();
 
-        if let Some(handle) = self.handle.lock().unwrap().take() {
-            handle.join().unwrap()?;
+        if let Some(handle) = self.handle.lock().map_err(|e| Error::Lock(e.to_string()))?.take() {
+            return handle.join().map_err(|_| Error::Terminated)?;
         }
 
         Ok(())
@@ -100,13 +105,16 @@ impl EventLoop {
         !self.killed.load(Ordering::Relaxed)
     }
 
+    // TODO: this function is never used, find out if we can remove it
     pub(super) fn clear(&self) -> Result<(), Error> {
         if self.killed.load(Ordering::Relaxed) {
             return Err(Error::Terminated);
         }
 
-        let mut events = self.events.lock().unwrap();
+        let mut events = self.events.lock().map_err(|e| Error::Lock(e.to_string()))?;
+
         events.clear();
+
         Ok(())
     }
 }
@@ -185,9 +193,10 @@ impl EventHandler {
 
     pub(super) fn start(&self) -> Result<(), Error> {
         let event_loop = self.event_loop.clone();
+        let state = self.state.clone();
+
         self.event_loop.start(self.state.context.display.clone())?;
 
-        let state = self.state.clone();
         let handle = thread::spawn(move || {
             while let Ok(event) = event_loop.wait_event() {
                 match event {
@@ -202,9 +211,9 @@ impl EventHandler {
                             &state, requestor, selection, target, property, time,
                         )?;
                         if selection == state.atoms.selections.clipboard_manager
-                            && state.handover.is_in_progress()
+                            && state.handover.is_in_progress()?
                         {
-                            state.handover.update_status(false, true);
+                            state.handover.update_status(false, true)?;
                         }
                     }
                     Event::SelectionRequest {
@@ -217,9 +226,9 @@ impl EventHandler {
                         Self::handle_selection_request(
                             &state, selection, target, property, owner, time,
                         )?;
-                        if target != state.atoms.protocol.targets && state.handover.is_in_progress()
+                        if target != state.atoms.protocol.targets && state.handover.is_in_progress()?
                         {
-                            state.handover.update_status(true, false);
+                            state.handover.update_status(true, false)?;
                         }
                     }
                     Event::SelectionClear {
@@ -232,13 +241,16 @@ impl EventHandler {
                     _ => {}
                 }
             }
+
             Ok(())
         });
 
-        *self.join_handle.lock().unwrap() = Some(handle);
+        *self.join_handle.lock().map_err(|e| Error::Lock(e.to_string()))? = Some(handle);
+
         Ok(())
     }
 
+    // TODO: this function is also unused
     pub(super) fn get(
         &self,
         selection: Atom,
@@ -266,13 +278,15 @@ impl EventHandler {
 
             // Create transfer state
             let (_state, sync) = {
-                let mut transfers = self.state.transfers.lock().unwrap();
+                let mut transfers = self.state.transfers.lock().map_err(|e| Error::Lock(e.to_string()))?;
+
                 let entry = transfers.entry((selection, target)).or_insert_with(|| {
                     (
                         TransferState::empty(target),
                         Arc::new((Mutex::new(false), Condvar::new())),
                     )
                 });
+
                 (entry.0.clone(), entry.1.clone())
             };
 
@@ -286,7 +300,7 @@ impl EventHandler {
 
             // Wait for completion
             let (lock, cvar) = &*sync;
-            let mut completed = lock.lock().unwrap();
+            let mut completed = lock.lock().map_err(|e| Error::Lock(e.to_string()))?;
             let timeout = Instant::now() + TRANSFER_TIMEOUT;
 
             while !*completed {
@@ -295,8 +309,7 @@ impl EventHandler {
                     return Err(Error::Timeout);
                 }
                 let duration = timeout - now;
-                let (new_completed, timeout_result) =
-                    cvar.wait_timeout(completed, duration).unwrap();
+                let (new_completed, timeout_result) = cvar.wait_timeout(completed, duration).map_err(|e| Error::Other(e.to_string()))?;
                 completed = new_completed;
 
                 if timeout_result.timed_out() {
@@ -305,7 +318,7 @@ impl EventHandler {
             }
 
             // Get data from cache
-            let mut transfers = self.state.transfers.lock().unwrap();
+            let mut transfers = self.state.transfers.lock().map_err(|e| Error::Lock(e.to_string()))?;
 
             if let Some((state, _)) = transfers.remove(&(selection, target)) {
                 if state.completed {
@@ -350,11 +363,14 @@ impl EventHandler {
         self.state.cache.clear_selection(selection)
     }
 
+    // TODO: this function is also unused
     pub(super) fn stop(&self) -> Result<(), Error> {
         self.event_loop.stop()?;
-        if let Some(handle) = self.join_handle.lock().unwrap().take() {
-            handle.join().unwrap()?;
+
+        if let Some(handle) = self.join_handle.lock().map_err(|e| Error::Lock(e.to_string()))?.take() {
+            return handle.join().map_err(|_| Error::Terminated)?;
         }
+
         Ok(())
     }
 
@@ -374,19 +390,21 @@ impl EventHandler {
 
         // create or get transfer state
         let (_state, sync) = {
-            let mut transfers = transfers.lock().unwrap();
+            let mut transfers = transfers.lock().map_err(|e| Error::Lock(e.to_string()))?;
+
             let entry = transfers.entry((selection, target)).or_insert_with(|| {
                 (
                     TransferState::default(),
                     Arc::new((Mutex::new(false), Condvar::new())),
                 )
             });
+
             (entry.0.clone(), entry.1.clone())
         };
 
         // wait for completion
         let (lock, cvar) = &*sync;
-        let mut completed = lock.lock().unwrap();
+        let mut completed = lock.lock().map_err(|e| Error::Lock(e.to_string()))?;
         let deadline = Instant::now() + timeout;
 
         while !*completed {
@@ -396,9 +414,11 @@ impl EventHandler {
             }
 
             let remaining = deadline - now;
+
             let (new_completed, timeout_result) = cvar
                 .wait_timeout(completed, remaining)
                 .map_err(|_| Error::Timeout)?;
+
             completed = new_completed;
 
             if timeout_result.timed_out() {
@@ -407,7 +427,8 @@ impl EventHandler {
         }
 
         // get data from cache
-        let mut transfers = transfers.lock().unwrap();
+        let mut transfers = transfers.lock().map_err(|e| Error::Lock(e.to_string()))?;
+
         if let Some((state, _)) = transfers.remove(&(selection, target)) {
             if state.completed {
                 Ok(Some(ClipboardData::new(state.data, target)))
@@ -420,7 +441,7 @@ impl EventHandler {
     }
 
     pub fn check_handover_state(&self) -> Result<Option<HandoverStatus>, Error> {
-        let status = self.state.handover.status();
+        let status = self.state.handover.status()?;
 
         // already completed
         if status.is_completed() {
@@ -435,8 +456,8 @@ impl EventHandler {
         Ok(None)
     }
 
-    pub(super) fn set_in_progress(&self) {
-        self.state.handover.set_in_progress();
+    pub(super) fn set_in_progress(&self) -> Result<(), Error> {
+        self.state.handover.set_in_progress()
     }
 
     pub(super) fn wait_handover_changed(&self) -> Result<HandoverStatus, Error> {
@@ -449,6 +470,7 @@ impl EventHandler {
                     return Ok(state);
                 }
             }
+
             thread::sleep(Duration::from_millis(10));
         }
 
@@ -466,8 +488,8 @@ impl EventHandler {
             return Ok(());
         }
 
-        if state.handover.is_in_progress() {
-            state.handover.update_status(false, true);
+        if state.handover.is_in_progress()? {
+            state.handover.update_status(false, true)?;
         }
 
         Ok(())
@@ -690,6 +712,7 @@ impl EventHandler {
 impl Drop for EventHandler {
     fn drop(&mut self) {
         self.event_loop.stop().ok();
+
         if let Some(handle) = self.join_handle.lock().unwrap().take() {
             handle.join().ok();
         }

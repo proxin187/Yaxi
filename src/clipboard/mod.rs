@@ -413,7 +413,7 @@ impl Clipboard {
         )?;
 
         // 5. set in progress
-        self.handler.set_in_progress();
+        self.handler.set_in_progress()?;
 
         // 6. wait handover changed
         match self.handler.wait_handover_changed() {

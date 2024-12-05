@@ -339,13 +339,14 @@ pub(super) struct Handover {
 }
 
 impl Handover {
-    pub(super) fn update_status(&self, written: bool, notified: bool) {
+    pub(super) fn update_status(&self, written: bool, notified: bool) -> Result<(), Error> {
         log::debug!(
             "Updating handover state: written: {}, notified: {}",
             written,
             notified
         );
-        let mut status = self.status.lock().unwrap();
+
+        let mut status = self.status.lock().map_err(|e| Error::Lock(e.to_string()))?;
 
         if written {
             status.written = true;
@@ -359,24 +360,31 @@ impl Handover {
             status.state = HandoverState::Completed;
             self.condvar.notify_all();
         }
+
+        Ok(())
     }
 
-    pub(super) fn status(&self) -> HandoverStatus {
-        *self.status.lock().unwrap()
+    pub(super) fn status(&self) -> Result<HandoverStatus, Error> {
+        self.status.lock()
+            .map(|lock| *lock)
+            .map_err(|e| Error::Lock(e.to_string()))
     }
 
-    pub(super) fn is_completed(&self) -> bool {
-        let status = self.status.lock().unwrap();
-        status.is_completed()
+    pub(super) fn is_completed(&self) -> Result<bool, Error> {
+        self.status.lock()
+            .map(|status| status.is_completed())
+            .map_err(|e| Error::Lock(e.to_string()))
     }
 
-    pub(super) fn is_in_progress(&self) -> bool {
-        let status = self.status.lock().unwrap();
-        status.is_in_progress()
+    pub(super) fn is_in_progress(&self) -> Result<bool, Error> {
+        self.status.lock()
+            .map(|status| status.is_in_progress())
+            .map_err(|e| Error::Lock(e.to_string()))
     }
 
-    pub(super) fn set_in_progress(&self) {
-        let mut status = self.status.lock().unwrap();
-        status.state = HandoverState::InProgress;
+    pub(super) fn set_in_progress(&self) -> Result<(), Error> {
+        self.status.lock()
+            .map(|mut status| status.state = HandoverState::InProgress)
+            .map_err(|e| Error::Lock(e.to_string()))
     }
 }
