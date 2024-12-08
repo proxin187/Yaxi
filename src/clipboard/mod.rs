@@ -1,3 +1,23 @@
+//! This module provides a clean x11 clipboard interface, notably support for reading and writing
+//! clipboard contents.
+//!
+//! # Basic Usage
+//! A example of opening a clipboard connection, note that the argument to `Clipboard::new`
+//! specifies the display to open a clipboard connection to similarly to `display::open`.
+//!
+//! ```no_run
+//! use yaxi::clipboard::Clipboard;
+//!
+//! let clipboard = Clipboard::new(None).unwrap();
+//! ```
+//!
+//! For more examples check out to the individual functions inside the `Clipboard` structure.
+//!
+//! # Compatability
+//! The clipboard module of yaxi is **ONLY** a x11 clipboard implementation and will therefore not
+//! work with any non x11 system.
+//!
+
 use std::sync::Arc;
 use std::time::Duration;
 
