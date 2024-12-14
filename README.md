@@ -17,7 +17,7 @@
 * Clean Interface - yaxi provides a clean interface, making it perfect for both beginners and experienced developers
 * Safety - yaxi has safe interface for x11 unlike many other x11 libraries
 * Not A Wrapper - yaxi is a pure rust implementation and is NOT a wrapper
-* No Dependencies - yaxi doesnt depend on any crates
+* No Release Dependencies - yaxi release builds dont depend on any crates
 
 ## Goals
 - [X] Authorization
@@ -27,6 +27,7 @@
 - [X] Extensions (Xinerama, Xft, ...) (Only Xinerama Implemented So Far)
 - [X] Clipboard Support
 - [ ] Comprehensive Documentation
+- [ ] GLX
 - [ ] Window Manager in yaxi (work in progress)
 
 ## Example

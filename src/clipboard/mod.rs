@@ -36,6 +36,9 @@ pub mod error;
 mod event;
 mod model;
 
+/// this structure represents a html selection, notably it contains the raw html and an optional
+/// alt attribute which contains the text representation
+
 #[derive(Debug, Clone)]
 pub struct Html {
     pub html: String,
@@ -47,19 +50,23 @@ impl Html {
         Html { html, alt }
     }
 
+    /// this function checks if the html is empty
     pub fn is_empty(&self) -> bool {
         self.html.is_empty()
     }
 
+    /// get a string reference to the html
     pub fn html(&self) -> &str {
         &self.html
     }
 
+    /// get a optional string reference containing the alt
     pub fn alt(&self) -> Option<&str> {
         self.alt.as_deref()
     }
 }
 
+/// this enum represents different image formats that can be read and written from the clipboard
 #[derive(Debug, Clone, Copy)]
 pub enum ImageFormat {
     Png,
@@ -68,6 +75,8 @@ pub enum ImageFormat {
     Bmp,
 }
 
+/// this structure represents an image, specificaly it contains the raw bytes and the corresponding
+/// image format
 #[derive(Debug, Clone)]
 pub struct Image {
     pub bytes: Vec<u8>,
@@ -75,27 +84,33 @@ pub struct Image {
 }
 
 impl Image {
+    /// get the length of the raw image bytes
     pub fn len(&self) -> usize {
         self.bytes.len()
     }
 
+    /// check if an image selection is empty
     pub fn is_empty(&self) -> bool {
         self.bytes.is_empty()
     }
 
+    /// get the image format
     pub fn format(&self) -> ImageFormat {
         self.format
     }
 
+    /// get a reference to the raw bytes
     pub fn bytes(&self) -> &[u8] {
         &self.bytes
     }
 
+    /// get an owned vector of the raw bytes
     pub fn into_bytes(self) -> Vec<u8> {
         self.bytes
     }
 }
 
+/// this structure represents a selection target, eg. STRING_UTF8, text/html and so on.
 #[derive(Debug, Clone)]
 pub struct Target {
     pub atom: Atom,
@@ -108,6 +123,7 @@ impl std::fmt::Display for Target {
     }
 }
 
+/// this structure represents a single clipboard connection to the x11 server
 pub struct Clipboard {
     context: Context,
     atoms: Atoms,
@@ -187,6 +203,7 @@ impl Clipboard {
 }
 
 impl Clipboard {
+    /// this function clears the clipboard content
     pub fn clear(&self) -> Result<(), Error> {
         let selection = self.atoms.selections.clipboard;
         self.write(
@@ -200,6 +217,7 @@ impl Clipboard {
         Ok(())
     }
 
+    /// this sets the clipboard content to a string with the following targets: UTF8_STRING, text/plain;charset=utf-8
     pub fn set_text(&self, text: &str) -> Result<(), Error> {
         let bytes = text.as_bytes();
         let data = vec![
@@ -212,6 +230,7 @@ impl Clipboard {
         Ok(())
     }
 
+    /// try to get the clipboard content as text with the following targets: UTF8_STRING, text/plain;charset=utf-8
     pub fn get_text(&self) -> Result<Option<String>, Error> {
         let targets = self.get_targets()?;
         let formats = [
@@ -231,9 +250,11 @@ impl Clipboard {
                 return Ok(Some(String::from_utf8(data.bytes().to_owned())?));
             }
         }
+
         Ok(None)
     }
 
+    /// try to get the clipboard content as html with text/html and alt with UTF8_STRING, text/plain;charset=utf-8
     pub fn get_html(&self) -> Result<Option<Html>, Error> {
         let targets = self.get_targets()?;
         if !targets.contains(&self.atoms.formats.html) {
@@ -253,6 +274,7 @@ impl Clipboard {
         Ok(None)
     }
 
+    /// set the clipboard content to html with text/html and optionaly alt with UTF8_STRING, text/plain;charset=utf-8
     pub fn set_html(&self, html: &str, alt: Option<&str>) -> Result<(), Error> {
         let mut data = vec![ClipboardData::from_bytes(
             html.as_bytes().to_vec(),
@@ -270,6 +292,7 @@ impl Clipboard {
         Ok(())
     }
 
+    /// try to get the uri list with text/uri-list
     pub fn get_uri_list(&self) -> Result<Option<Vec<String>>, Error> {
         let targets = self.get_targets()?;
         if !targets.contains(&self.atoms.formats.uri_list) {
@@ -291,6 +314,7 @@ impl Clipboard {
         Ok(None)
     }
 
+    /// set the uri list with text/uri-list
     pub fn set_uri_list(&self, paths: &[&std::path::Path]) -> Result<(), Error> {
         let uris: Vec<String> = paths
             .iter()
@@ -318,6 +342,7 @@ impl Clipboard {
         Ok(())
     }
 
+    /// try to get an image from the clipboard with any of the following formats: image/png, image/jpeg, image/tiff, image/bmp
     pub fn get_image(&self) -> Result<Option<Image>, Error> {
         let targets = self.get_targets()?;
         let formats = [
@@ -352,6 +377,7 @@ impl Clipboard {
         Ok(None)
     }
 
+    /// set the clipboard content to an image with any of the following formats: image/png, image/jpeg, image/tiff, image/bmp
     pub fn set_image(&self, bytes: Vec<u8>, format: ImageFormat) -> Result<(), Error> {
         let format = match format {
             ImageFormat::Png => self.atoms.formats.png,
@@ -365,6 +391,7 @@ impl Clipboard {
         Ok(())
     }
 
+    /// get the supported targets for the clibpoard
     pub fn get_targets(&self) -> Result<Vec<Atom>, Error> {
         let mut targets = vec![];
 
@@ -382,6 +409,7 @@ impl Clipboard {
         Ok(targets)
     }
 
+    /// get the supported targets for the clipboard including its name
     pub fn get_targets_with_name(&self) -> Result<Vec<Target>, Error> {
         let mut targets = vec![];
 
@@ -407,6 +435,7 @@ impl Clipboard {
     fn try_handover_clipboard(&self) -> Result<Option<HandoverStatus>, Error> {
         let selection = self.context.atoms.selections.clipboard;
 
+        #[cfg(feature = "debug")]
         log::info!(
             "Handover {} to CLIPBOARD_MANAGER, window: {}",
             selection.display_name(),
@@ -451,13 +480,17 @@ impl Clipboard {
 
 impl Drop for Clipboard {
     fn drop(&mut self) {
+        #[cfg(feature = "debug")]
         log::trace!("Clipboard dropping, try handover clipboard");
+
         match self.try_handover_clipboard() {
-            Ok(state) => {
-                log::trace!("Handover finished, state: {:?}", state);
+            Ok(_state) => {
+                #[cfg(feature = "debug")]
+                log::trace!("Handover finished, state: {:?}", _state);
             }
-            Err(e) => {
-                log::error!("Handover failed: {}", e);
+            Err(_e) => {
+                #[cfg(feature = "debug")]
+                log::error!("Handover failed: {}", _e);
             }
         }
     }

@@ -6,14 +6,14 @@
 //! - Clean Interface - yaxi provides a clean interface, making it perfect for both beginners and experienced developers
 //! - Safety - yaxi has safe interface for x11 unlike many other x11 libraries
 //! - Not A Wrapper - yaxi is a pure rust implementation and is NOT a wrapper
-//! - No Dependencies - yaxi doesnt depend on any crates
+//! - No Release Dependencies - yaxi release builds dont depend on any crates
 //!
 //! # Usage
 //! This crate is on [crates.io](https://crates.io/crates/yaxi) and can be added either through
 //! adding `yaxi` to your dependencies in `Cargo.toml`:
 //! ```toml
 //! [dependencies]
-//! yaxi = "0.1.54"
+//! yaxi = "0.1.55"
 //! ```
 //!
 //! Or running the following Cargo command in your project directory:

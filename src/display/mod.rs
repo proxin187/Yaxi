@@ -587,6 +587,51 @@ impl Display {
         KeycodeRange::new(self.setup.min_keycode, self.setup.max_keycode)
     }
 
+    /// If dst-window is None, this request moves the pointer by offsets [dst-x, dst-y] relative to the current position of the pointer. If dst-window isawindow, this request moves the pointer to [dst-x,
+    /// dst-y] relative to dst-window’s origin. However, if src-window is not None, the move only takes
+    /// place if src-window contains the pointer and the pointer is contained in the specified rectangle of src-window.
+    /// The src-x and src-y coordinates are relative to src-window’s origin.
+    /// If src-height is zero, it is replaced with the current height of src-window minus src-y. If src-width is zero, it is replaced
+    /// with the current width of src-window minus src-x.
+    ///
+    /// This request cannot be used to move the pointer outside the confine-to window of an active
+    /// pointer grab. An attempt will only move the pointer as far as the closest edge of the confine-to window.
+    ///
+    ///This request will generate events just as if the user had instantaneously moved the pointer.
+    pub fn warp_pointer(
+        &self,
+        src_x: i16,
+        src_y: i16,
+        src_width: u16,
+        src_height: u16,
+        dst_x: i16,
+        dst_y: i16,
+        src_window: Option<Window>,
+        dst_window: Option<Window>,
+    ) -> Result<(), Error> {
+        self.sequence.skip();
+
+        self.stream.send_encode(WarpPointer {
+            opcode: Opcode::WARP_POINTER,
+            pad0: 0,
+            length: 6,
+            src_window: src_window.map(|window| window.id()).unwrap_or(0),
+            dst_window: dst_window.map(|window| window.id()).unwrap_or(0),
+            src_x,
+            src_y,
+            src_width,
+            src_height,
+            dst_x,
+            dst_y,
+        })
+    }
+
+    /// This request is a wrapper around warp pointer that allows you to only warp the pointer
+    /// relative to its current position
+    pub fn warp_pointer_relative(&self, x: i16, y: i16) -> Result<(), Error> {
+        self.warp_pointer(0, 0, 0, 0, x, y, None, None)
+    }
+
     /// This request releases the keyboard if this client has it actively grabbed (as a result of either GrabKeyboard or GrabKey) and releases any queued events (server side).
     pub fn ungrab_keyboard(&self) -> Result<(), Error> {
         self.sequence.skip();

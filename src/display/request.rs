@@ -898,6 +898,22 @@ pub struct UngrabKeyboard {
     pub time: u32,
 }
 
+#[repr(packed, C)]
+#[derive(Debug, Clone)]
+pub struct WarpPointer {
+    pub opcode: u8,
+    pub pad0: u8,
+    pub length: u16,
+    pub src_window: u32,
+    pub dst_window: u32,
+    pub src_x: i16,
+    pub src_y: i16,
+    pub src_width: u16,
+    pub src_height: u16,
+    pub dst_x: i16,
+    pub dst_y: i16,
+}
+
 pub fn encode<T>(ptr: &T) -> &[u8] {
     unsafe { slice::from_raw_parts((ptr as *const T) as *const u8, mem::size_of::<T>()) }
 }

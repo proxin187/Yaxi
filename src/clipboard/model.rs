@@ -340,6 +340,7 @@ pub(super) struct Handover {
 
 impl Handover {
     pub(super) fn update_status(&self, written: bool, notified: bool) -> Result<(), Error> {
+        #[cfg(feature = "debug")]
         log::debug!(
             "Updating handover state: written: {}, notified: {}",
             written,

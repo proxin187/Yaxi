@@ -505,6 +505,7 @@ impl EventHandler {
         property: Atom,
         time: u32,
     ) -> Result<(), Error> {
+        #[cfg(feature = "debug")]
         log::debug!(
             "SelectionNotify: requestor: {} selection: {}, target: {}, property: {}, time: {}",
             requestor,
@@ -564,6 +565,7 @@ impl EventHandler {
         owner: u32,
         time: u32,
     ) -> Result<(), Error> {
+        #[cfg(feature = "debug")]
         log::debug!(
             "SelectionRequest: selection: {}, target: {}, property: {}, owner: {}, time: {}",
             selection.display_name(),
@@ -626,6 +628,7 @@ impl EventHandler {
         selection: Atom,
         time: u32,
     ) -> Result<(), Error> {
+        #[cfg(feature = "debug")]
         log::debug!(
             "SelectionClear: owner: {}, selection: {}, time: {}",
             owner,
