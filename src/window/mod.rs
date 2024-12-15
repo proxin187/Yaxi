@@ -243,6 +243,12 @@ impl From<Window> for u32 {
     }
 }
 
+impl std::fmt::Debug for Window {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
+        f.write_fmt(format_args!("{}", self.id()))
+    }
+}
+
 impl Window {
     pub fn new(
         stream: Stream,
