@@ -652,9 +652,12 @@ impl Window {
 
     /// move and resize a window, this is a fancy wrapper for configure
     pub fn mov_resize(&self, x: u16, y: u16, width: u16, height: u16) -> Result<(), Error> {
-        self.mov(x, y)?;
-
-        self.resize(width, height)
+        self.configure(ValuesBuilder::new(vec![
+            ConfigureValue::X(x),
+            ConfigureValue::Y(y),
+            ConfigureValue::Width(width),
+            ConfigureValue::Height(height),
+        ]))
     }
 
     /// choose the events you want to recieve
