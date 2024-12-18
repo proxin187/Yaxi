@@ -202,10 +202,26 @@ impl Clipboard {
     }
 }
 
+// TODO: we have to test these examples
+
 impl Clipboard {
-    /// this function clears the clipboard content
+    /// this function clears the clipboard content, this function simply sets the clipboard content
+    /// to an empty utf8 string.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use yaxi::clipboard::Clipboard;
+    ///
+    /// let clipboard = Clipboard::new(None).unwrap();
+    ///
+    /// clipboard.clear().unwrap();
+    ///
+    /// assert_eq!(clipboard.get_text().unwrap(), None)
+    /// ```
     pub fn clear(&self) -> Result<(), Error> {
         let selection = self.atoms.selections.clipboard;
+
         self.write(
             vec![ClipboardData::from_bytes(
                 vec![],
@@ -213,13 +229,28 @@ impl Clipboard {
             )],
             selection,
         )?;
+
         self.handler.clear(selection)?;
+
         Ok(())
     }
 
     /// this sets the clipboard content to a string with the following targets: UTF8_STRING, text/plain;charset=utf-8
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use yaxi::clipboard::Clipboard;
+    ///
+    /// let clipboard = Clipboard::new(None).unwrap();
+    ///
+    /// clipboard.set_text("this is a test").unwrap();
+    ///
+    /// assert_eq!(clipboard.get_text().unwrap(), Some("this is a test"))
+    /// ```
     pub fn set_text(&self, text: &str) -> Result<(), Error> {
         let bytes = text.as_bytes();
+
         let data = vec![
             ClipboardData::from_bytes(bytes.to_vec(), self.atoms.formats.utf8_string),
             ClipboardData::from_bytes(bytes.to_vec(), self.atoms.formats.utf8_mime),
@@ -227,12 +258,24 @@ impl Clipboard {
         ];
 
         self.write(data, self.atoms.selections.clipboard)?;
+
         Ok(())
     }
 
     /// try to get the clipboard content as text with the following targets: UTF8_STRING, text/plain;charset=utf-8
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use yaxi::clipboard::Clipboard;
+    ///
+    /// let clipboard = Clipboard::new(None).unwrap();
+    ///
+    /// assert!(clipboard.get_text().is_ok())
+    /// ```
     pub fn get_text(&self) -> Result<Option<String>, Error> {
         let targets = self.get_targets()?;
+
         let formats = [
             self.atoms.formats.utf8_string,
             self.atoms.formats.utf8_mime,
@@ -255,8 +298,19 @@ impl Clipboard {
     }
 
     /// try to get the clipboard content as html with text/html and alt with UTF8_STRING, text/plain;charset=utf-8
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use yaxi::clipboard::Clipboard;
+    ///
+    /// let clipboard = Clipboard::new(None).unwrap();
+    ///
+    /// assert!(clipboard.get_html().is_ok())
+    /// ```
     pub fn get_html(&self) -> Result<Option<Html>, Error> {
         let targets = self.get_targets()?;
+
         if !targets.contains(&self.atoms.formats.html) {
             return Ok(None);
         }
@@ -266,8 +320,10 @@ impl Clipboard {
             if data.is_empty() {
                 return Ok(None);
             }
+
             let html = String::from_utf8(data.bytes().to_owned())?;
             let alt = self.get_text().ok().flatten();
+
             return Ok(Some(Html { html, alt }));
         }
 
@@ -275,6 +331,21 @@ impl Clipboard {
     }
 
     /// set the clipboard content to html with text/html and optionaly alt with UTF8_STRING, text/plain;charset=utf-8
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use yaxi::clipboard::Clipboard;
+    ///
+    /// let clipboard = Clipboard::new(None).unwrap();
+    ///
+    /// clipboard.set_html("<body><p>this is a html selection</p></body>", Some("this is a alt selection")).unwrap();
+    ///
+    /// let result = clipboard.get_html().unwrap();
+    ///
+    /// assert_eq!(result.html, "<body><p>this is a html selection</p></body>");
+    /// assert_eq!(result.alt, Some("this is a alt selection"));
+    /// ```
     pub fn set_html(&self, html: &str, alt: Option<&str>) -> Result<(), Error> {
         let mut data = vec![ClipboardData::from_bytes(
             html.as_bytes().to_vec(),
