@@ -802,6 +802,14 @@ impl Display {
     }
 }
 
+macro_rules! handle_reply {
+    ($self:ident, $response:ty, $reply:ident) => {
+        let response: $response = $self.stream.recv_decode()?;
+
+        $self.replies.push(Reply::$reply(response))?;
+    };
+}
+
 pub struct EventListener {
     stream: Stream,
     events: Queue<Event>,
@@ -832,10 +840,9 @@ impl EventListener {
 
         match sequence.kind {
             ReplyKind::InternAtom => {
-                let response: InternAtomResponse = self.stream.recv_decode()?;
-
-                self.replies.push(Reply::InternAtom(response))?;
-            }
+                // TODO: finish this
+                handle_reply!(self, InternAtomResponse, InternAtom);
+            },
             ReplyKind::GetWindowAttributes => {
                 let response: GetWindowAttributesResponse = self.stream.recv_decode()?;
 
