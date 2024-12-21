@@ -246,7 +246,7 @@ impl Clipboard {
     ///
     /// clipboard.set_text("this is a test").unwrap();
     ///
-    /// assert_eq!(clipboard.get_text().unwrap(), Some("this is a test"))
+    /// assert_eq!(clipboard.get_text().unwrap(), Some(String::from("this is a test")))
     /// ```
     pub fn set_text(&self, text: &str) -> Result<(), Error> {
         let bytes = text.as_bytes();
@@ -341,10 +341,10 @@ impl Clipboard {
     ///
     /// clipboard.set_html("<body><p>this is a html selection</p></body>", Some("this is a alt selection")).unwrap();
     ///
-    /// let result = clipboard.get_html().unwrap();
-    ///
-    /// assert_eq!(result.html, "<body><p>this is a html selection</p></body>");
-    /// assert_eq!(result.alt, Some("this is a alt selection"));
+    /// if let Some(result) = clipboard.get_html().unwrap() {
+    ///     assert_eq!(result.html, "<body><p>this is a html selection</p></body>");
+    ///     assert_eq!(result.alt, Some(String::from("this is a alt selection")));
+    /// }
     /// ```
     pub fn set_html(&self, html: &str, alt: Option<&str>) -> Result<(), Error> {
         let mut data = vec![ClipboardData::from_bytes(

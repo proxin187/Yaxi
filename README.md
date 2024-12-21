@@ -30,6 +30,18 @@
 - [ ] GLX
 - [ ] Window Manager in yaxi (work in progress)
 
+## Usage
+This crate is on [crates.io](https://crates.io/crates/yaxi) and can be added either through
+adding `yaxi` to your dependencies in `Cargo.toml`:
+```toml
+[dependencies]
+yaxi = "0.1.57"
+```
+Or running the following Cargo command in your project directory:
+```bash
+cargo add yaxi
+```
+
 ## Example
 
 This example opens a window and waits for a keyboard press before it quits:

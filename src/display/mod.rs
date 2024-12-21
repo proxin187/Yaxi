@@ -840,44 +840,29 @@ impl EventListener {
 
         match sequence.kind {
             ReplyKind::InternAtom => {
-                // TODO: finish this
                 handle_reply!(self, InternAtomResponse, InternAtom);
             },
             ReplyKind::GetWindowAttributes => {
-                let response: GetWindowAttributesResponse = self.stream.recv_decode()?;
-
-                self.replies.push(Reply::GetWindowAttributes(response))?;
+                handle_reply!(self, GetWindowAttributesResponse, GetWindowAttributes);
             }
             ReplyKind::GetGeometry => {
-                let response: GetGeometryResponse = self.stream.recv_decode()?;
-
-                self.replies.push(Reply::GetGeometry(response))?;
+                handle_reply!(self, GetGeometryResponse, GetGeometry);
             }
             ReplyKind::GrabPointer => {
-                let response: GrabPointerResponse = self.stream.recv_decode()?;
-
-                self.replies.push(Reply::GrabPointer(response))?;
+                handle_reply!(self, GrabPointerResponse, GrabPointer);
             }
             ReplyKind::QueryPointer => {
-                let response: QueryPointerResponse = self.stream.recv_decode()?;
-
-                self.replies.push(Reply::QueryPointer(response))?;
+                handle_reply!(self, QueryPointerResponse, QueryPointer);
             }
             ReplyKind::QueryExtension => {
-                let response: QueryExtensionResponse = self.stream.recv_decode()?;
-
-                self.replies.push(Reply::QueryExtension(response))?;
+                handle_reply!(self, QueryExtensionResponse, QueryExtension);
             }
             ReplyKind::GetSelectionOwner => {
-                let response: GetSelectionOwnerResponse = self.stream.recv_decode()?;
-
-                self.replies.push(Reply::GetSelectionOwner(response))?;
+                handle_reply!(self, GetSelectionOwnerResponse, GetSelectionOwner);
             }
             #[cfg(feature = "xinerama")]
             ReplyKind::XineramaIsActive => {
-                let response: XineramaIsActiveResponse = self.stream.recv_decode()?;
-
-                self.replies.push(Reply::XineramaIsActive(response))?;
+                handle_reply!(self, XineramaIsActiveResponse, XineramaIsActive);
             }
             #[cfg(feature = "xinerama")]
             ReplyKind::XineramaQueryScreens => {
@@ -892,9 +877,7 @@ impl EventListener {
                 self.replies.push(Reply::XineramaQueryScreens { screens })?;
             }
             ReplyKind::GetInputFocus => {
-                let response: GetInputFocusResponse = self.stream.recv_decode()?;
-
-                self.replies.push(Reply::GetInputFocus(response))?;
+                handle_reply!(self, GetInputFocusResponse, GetInputFocus);
             }
             ReplyKind::GrabKeyboard => {
                 let _: GrabKeyboardResponse = self.stream.recv_decode()?;
