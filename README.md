@@ -1,16 +1,11 @@
-<div align="center">
-<br>
-<a href="https://github.com/proxin187/yaxi">
-    <img src="assets/logo1.png" width="400">
-</a>
-<br>
+# Yaxi
+
+yaxi is a x11 library written from scratch
 
 ![GitHub License](https://img.shields.io/badge/license-MIT-red?style=for-the-badge&logo=none)
 ![dependencies](https://deps.rs/repo/github/proxin187/yaxi/status.svg?style=for-the-badge)
 [![crates.io](https://img.shields.io/badge/crates.io-yaxi-red?style=for-the-badge&logo=none)](https://crates.io/crates/yaxi)
 
-<h4>yaxi is a x11 library written from scratch</h4>
-</div>
 
 ## Key Features
 
